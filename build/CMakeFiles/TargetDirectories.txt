@@ -1,0 +1,3 @@
+/home/malek/work/gpu_dbms/build/CMakeFiles/gpu_dbms.dir
+/home/malek/work/gpu_dbms/build/CMakeFiles/edit_cache.dir
+/home/malek/work/gpu_dbms/build/CMakeFiles/rebuild_cache.dir

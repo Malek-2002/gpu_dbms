@@ -1,23 +1,54 @@
-cmake_minimum_required(VERSION 3.18)
-project(gpu_dbms LANGUAGES CUDA CXX)
+cmake_minimum_required(VERSION 3.10)
+project(gpu_dbms)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_STANDARD 14)
-set(CMAKE_CUDA_ARCHITECTURES 75) # Adjust for your GPU architecture
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Find required packages
-find_package(CUDA REQUIRED)
-find_package(GTest REQUIRED)
-
-# Include external dependencies
-add_subdirectory(extern/sql-parser)
-
-# Include directories
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/extern/sql-parser/src
+# Define source files for the main executable
+set(SOURCE_FILES
+    src/main.cpp
+    src/cli/command_line.cpp
+    src/parser/sql_parser.cpp
+    src/storage/csv_parser.cpp
+    src/storage/schema.cpp
+    src/storage/table.cpp
+    src/storage/catalog.cpp
+    src/execution/expression_evaluator.cpp
+    src/execution/query_executer.cpp 
+    src/execution/query_plan.cpp
+    src/execution/result.cpp
+    src/execution/operators/select_operator.cpp
+    src/execution/operators/filter_operator.cpp
+    # src/execution/operators/sort_operator.cpp
+    src/execution/operators/aggregate_operator.cpp
+    # src/execution/operators/join_operator.cpp
 )
 
-# Add subdirectories
-add_subdirectory(src)
-add_subdirectory(test)
+# Create the main executable
+add_executable(gpu_dbms ${SOURCE_FILES})
+
+# Define include directories
+set(INCLUDE_DIRS
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/extern/sql-parser/src
+)
+
+# Set include directories for the executable
+target_include_directories(gpu_dbms PRIVATE ${INCLUDE_DIRS})
+
+# Find the sqlparser library
+find_library(SQLPARSER_LIB sqlparser PATHS ${CMAKE_SOURCE_DIR}/extern/sql-parser)
+if(NOT SQLPARSER_LIB)
+    message(FATAL_ERROR "sqlparser library not found in ${CMAKE_SOURCE_DIR}/extern/sql-parser")
+endif()
+
+# Find nlohmann_json
+find_package(nlohmann_json QUIET)
+if (nlohmann_json_FOUND)
+    target_link_libraries(gpu_dbms PRIVATE nlohmann_json::nlohmann_json)
+else()
+    target_include_directories(gpu_dbms PRIVATE ${CMAKE_SOURCE_DIR}/include)
+endif()
+
+# Link the executable against the sqlparser library
+target_link_libraries(gpu_dbms PRIVATE ${SQLPARSER_LIB})
