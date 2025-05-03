@@ -15,7 +15,7 @@ AggregateOperator::AggregateOperator(
     : catalog_(catalog),
       input_schema_(input_schema),
       output_schema_(output_schema) {
-    
+     
     // Filter out and store aggregate expressions
     for (const auto& expr : exprs) {
         auto agg_expr = std::dynamic_pointer_cast<parser::AggregateExpression>(expr);
