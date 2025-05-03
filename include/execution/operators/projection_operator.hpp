@@ -1,35 +1,34 @@
 /**
- * @file sort_operator.hpp
- * @brief Sort operator for ordering rows based on expressions
+ * @file projection_operator.hpp
+ * @brief Projection operator for selecting columns from input
  */
 #pragma once
 
 #include "execution/operators/operator.hpp"
 #include "parser/query_model.hpp"
 #include <vector>
-#include <utility>
 
 namespace gpu_dbms {
 namespace execution {
 namespace operators {
 
 /**
- * @class SortOperator
- * @brief Operator that sorts rows from its input based on expressions
+ * @class ProjectionOperator
+ * @brief Operator that projects columns from its input based on expressions
  */
-class SortOperator : public Operator {
+class ProjectionOperator : public Operator {
 public:
     /**
-     * @brief Constructs a new SortOperator
+     * @brief Constructs a new ProjectionOperator
      * @param child The input operator
-     * @param order_by The expressions and sort orders to sort by
+     * @param expressions The expressions to project
      */
-    SortOperator(std::shared_ptr<Operator> child, 
-                const std::vector<std::pair<std::shared_ptr<parser::Expression>, parser::SortOrder>>& order_by);
+    ProjectionOperator(std::shared_ptr<Operator> child, 
+                      const std::vector<std::shared_ptr<parser::Expression>>& expressions);
 
     /**
      * @brief Returns the operator type
-     * @return The operator type (SORT)
+     * @return The operator type (PROJECTION)
      */
     OperatorType getType() const override;
 
@@ -43,7 +42,7 @@ public:
      * @brief Executes the operator and returns the result
      * @return The result of the operation
      */
-    std::shared_ptr<r> execute() override;
+    std::shared_ptr<Result> execute() override;
 
     /**
      * @brief Returns a string representation of the operator for visualization
@@ -65,16 +64,20 @@ public:
     std::shared_ptr<Operator> getChild() const { return child_; }
 
     /**
-     * @brief Returns the sort expressions and orders
-     * @return The sort expressions and orders
+     * @brief Returns the projection expressions
+     * @return The projection expressions
      */
-    const std::vector<std::pair<std::shared_ptr<parser::Expression>, parser::SortOrder>>& getOrderBy() const { 
-        return order_by_; 
-    }
+    const std::vector<std::shared_ptr<parser::Expression>>& getExpressions() const { return expressions_; }
 
 private:
     std::shared_ptr<Operator> child_;
-    std::vector<std::pair<std::shared_ptr<parser::Expression>, parser::SortOrder>> order_by_;
+    std::vector<std::shared_ptr<parser::Expression>> expressions_;
+    std::shared_ptr<storage::Schema> output_schema_;
+
+    /**
+     * @brief Builds the output schema based on the expressions
+     */
+    void buildOutputSchema();
 };
 
 } // namespace operators

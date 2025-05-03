@@ -1,32 +1,31 @@
 /**
- * @file select_operator.hpp
- * @brief Select operator for scanning tables
+ * @file cross_product_operator.hpp
+ * @brief Cross product operator for combining two input operators
  */
 #pragma once
 
 #include "execution/operators/operator.hpp"
-#include "storage/table.hpp"
 
 namespace gpu_dbms {
 namespace execution {
 namespace operators {
 
 /**
- * @class SelectOperator
- * @brief Operator that scans a table and produces rows
+ * @class CrossProductOperator
+ * @brief Operator that performs a cross product of two input operators
  */
-class SelectOperator : public Operator {
+class CrossProductOperator : public Operator {
 public:
     /**
-     * @brief Constructs a new SelectOperator
-     * @param table The table to scan
-     * @param alias The alias for the table (optional)
+     * @brief Constructs a new CrossProductOperator
+     * @param left_child The left input operator
+     * @param right_child The right input operator
      */
-    SelectOperator(std::shared_ptr<storage::Table> table, const std::string& alias = "");
+    CrossProductOperator(std::shared_ptr<Operator> left_child, std::shared_ptr<Operator> right_child);
 
     /**
      * @brief Returns the operator type
-     * @return The operator type (SELECT)
+     * @return The operator type (CROSS_PRODUCT)
      */
     OperatorType getType() const override;
 
@@ -40,7 +39,7 @@ public:
      * @brief Executes the operator and returns the result
      * @return The result of the operation
      */
-    std::shared_ptr<r> execute() override;
+    std::shared_ptr<Result> execute() override;
 
     /**
      * @brief Returns a string representation of the operator for visualization
@@ -56,20 +55,20 @@ public:
     size_t estimateRowCount() const override;
 
     /**
-     * @brief Returns the table being scanned
-     * @return The table
+     * @brief Returns the left child operator
+     * @return The left child operator
      */
-    std::shared_ptr<storage::Table> getTable() const { return table_; }
+    std::shared_ptr<Operator> getLeftChild() const { return left_child_; }
 
     /**
-     * @brief Returns the alias for the table
-     * @return The alias
+     * @brief Returns the right child operator
+     * @return The right child operator
      */
-    const std::string& getAlias() const { return alias_; }
+    std::shared_ptr<Operator> getRightChild() const { return right_child_; }
 
 private:
-    std::shared_ptr<storage::Table> table_;
-    std::string alias_;
+    std::shared_ptr<Operator> left_child_;
+    std::shared_ptr<Operator> right_child_;
     std::shared_ptr<storage::Schema> output_schema_;
 };
 
