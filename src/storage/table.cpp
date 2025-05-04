@@ -60,6 +60,15 @@ const ColumnData& Table::getColumn(const std::string& column_name) const {
     return columns_[it->second];
 }
 
+ColumnData& Table::getColumn(const std::string& column_name) {
+    auto it = column_map_.find(column_name);
+    if (it == column_map_.end()) {
+        throw std::runtime_error("Column " + column_name + " does not exist");
+    }
+    
+    return columns_[it->second];
+}
+
 std::shared_ptr<Schema> Table::getSchema() const {
     return schema_;
 }
@@ -74,6 +83,10 @@ size_t Table::numColumns() const {
 
 std::shared_ptr<Table> Table::createEmptyTable() const {
     return std::make_shared<Table>(schema_);
+}
+
+bool Table::hasColumn(const std::string& column_name) const {
+    return column_map_.find(column_name) != column_map_.end();
 }
 
 } // namespace storage

@@ -7,9 +7,9 @@ namespace storage {
 Schema::Schema(const std::string& table_name) : table_name_(table_name) {}
 
 void Schema::addColumn(const ColumnInfo& column_info) {
-    if (column_map_.find(column_info.name) != column_map_.end()) {
-        throw std::runtime_error("Column " + column_info.name + " already exists in table " + table_name_);
-    }
+    // if (column_map_.find(column_info.name) != column_map_.end()) {
+    //     throw std::runtime_error("Column " + column_info.name + " already exists in table " + table_name_);
+    // }
     
     column_map_[column_info.name] = columns_.size();
     columns_.push_back(column_info);

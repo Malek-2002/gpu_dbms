@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <set>
 
 namespace gpu_dbms {
 namespace parser {
@@ -114,9 +115,15 @@ struct QueryModel {
     std::shared_ptr<Expression> where_clause;
     std::vector<std::pair<std::shared_ptr<Expression>, SortOrder>> order_by;
     std::shared_ptr<QueryModel> subquery;
+    // Store all conditions once
+    std::vector<std::shared_ptr<Expression>> conditions;
+    // Join conditions reference indices into conditions
+    std::vector<std::pair<std::vector<TableRef>, size_t>> join_conditions;
+    // Table-specific conditions reference indices into conditions
+    std::unordered_map<std::string, std::vector<size_t>> table_specific_conditions;
     
     bool hasSubquery() const { return subquery != nullptr; }
-};
+};  
 
 } // namespace parser
 } // namespace gpu_dbms
