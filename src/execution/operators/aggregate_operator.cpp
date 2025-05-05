@@ -6,10 +6,31 @@
 #include <iostream>
 
 // include extern function that calls CUDA kernel
+/////////////////// sum kernels //////////////////////
+// int version
+extern int parallel_sum(const std::vector<int>& data);
 // long version
 extern long parallel_sum(const std::vector<long>& data);
 // double version
 extern double parallel_sum(const std::vector<double>& data);
+/////////////////// max kernels //////////////////////
+// int version
+extern int parallel_max(const std::vector<int>& data);
+// long version
+extern long parallel_max(const std::vector<long>& data);
+// double version
+extern double parallel_max(const std::vector<double>& data);
+// string version
+extern std::string parallel_max(const std::vector<std::string>& data);
+/////////////////// min kernels ///////////////////////
+// int version
+extern int parallel_min(const std::vector<int>& data);
+// long version
+extern long parallel_min(const std::vector<long>& data);
+// double version
+extern double parallel_min(const std::vector<double>& data);
+// string version
+extern std::string parallel_min(const std::vector<std::string>& data);
 
 namespace gpu_dbms {
 namespace execution {
@@ -194,12 +215,22 @@ Value AggregateOperator::computeAvg(const storage::ColumnData& col_data) const {
     if (std::holds_alternative<storage::IntColumn>(col_data)) {
         const auto& data = std::get<storage::IntColumn>(col_data);
         if (data.empty()) return 0.0;
-        double sum = std::accumulate(data.begin(), data.end(), 0.0);
-        return sum / data.size();
+        // cpu version
+        // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+        ///////////////////////////////////////////////////////////////////////
+        // gpu version
+        // extern function that calls CUDA kernel
+        long sum = parallel_sum(data);
+        return (double)sum / data.size();
     } else if (std::holds_alternative<storage::FloatColumn>(col_data)) {
         const auto& data = std::get<storage::FloatColumn>(col_data);
         if (data.empty()) return 0.0;
-        double sum = std::accumulate(data.begin(), data.end(), 0.0);
+        // cpu version
+        // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+        ////////////////////////////////////////////////////////////////
+        // gpu version
+        // extern function that calls CUDA kernel
+        double sum = parallel_sum(data);
         return sum / data.size();
     } else {
         throw std::runtime_error("AVG can only be applied to numeric columns");
@@ -209,15 +240,27 @@ Value AggregateOperator::computeMin(const storage::ColumnData& col_data) const {
     if (std::holds_alternative<storage::IntColumn>(col_data)) {
         const auto& data = std::get<storage::IntColumn>(col_data);
         if (data.empty()) return std::monostate{};
-        return static_cast<int64_t>(*std::min_element(data.begin(), data.end()));
+        // cpu version
+        // return static_cast<int64_t>(*std::min_element(data.begin(), data.end()));
+        ///////////////////////////////////////////////////////////////////////
+        // gpu version
+        return static_cast<int64_t>(parallel_min(data));
     } else if (std::holds_alternative<storage::FloatColumn>(col_data)) {
         const auto& data = std::get<storage::FloatColumn>(col_data);
         if (data.empty()) return std::monostate{};
-        return *std::min_element(data.begin(), data.end());
+        // cpu version
+        // return *std::min_element(data.begin(), data.end());
+        ////////////////////////////////////////////////////////////////
+        // gpu version
+        return parallel_min(data);
     } else if (std::holds_alternative<storage::StringColumn>(col_data)) {
         const auto& data = std::get<storage::StringColumn>(col_data);
         if (data.empty()) return std::monostate{};
-        return *std::min_element(data.begin(), data.end());
+        // cpu version
+        // return *std::min_element(data.begin(), data.end());
+        ////////////////////////////////////////////////////////////////
+        // gpu version
+        return parallel_min(data);
     } else {
         throw std::runtime_error("MIN not supported for this column type");
     }
@@ -227,15 +270,27 @@ Value AggregateOperator::computeMax(const storage::ColumnData& col_data) const {
     if (std::holds_alternative<storage::IntColumn>(col_data)) {
         const auto& data = std::get<storage::IntColumn>(col_data);
         if (data.empty()) return std::monostate{};
-        return static_cast<int64_t>(*std::max_element(data.begin(), data.end()));
+        // cpu version
+        // return static_cast<int64_t>(*std::max_element(data.begin(), data.end()));
+        ///////////////////////////////////////////////////////////////////////
+        // gpu version
+        return static_cast<int64_t>(parallel_max(data));
     } else if (std::holds_alternative<storage::FloatColumn>(col_data)) {
         const auto& data = std::get<storage::FloatColumn>(col_data);
         if (data.empty()) return std::monostate{};
-        return *std::max_element(data.begin(), data.end());
+        // cpu version
+        // return *std::max_element(data.begin(), data.end());
+        ////////////////////////////////////////////////////////////////
+        // gpu version
+        return parallel_max(data);
     } else if (std::holds_alternative<storage::StringColumn>(col_data)) {
         const auto& data = std::get<storage::StringColumn>(col_data);
         if (data.empty()) return std::monostate{};
-        return *std::max_element(data.begin(), data.end());
+        // cpu version
+        // return *std::max_element(data.begin(), data.end());
+        ////////////////////////////////////////////////////////////////
+        // gpu version
+        return parallel_max(data);
     } else {
         throw std::runtime_error("MAX not supported for this column type");
     }
@@ -266,17 +321,33 @@ Value AggregateOperator::computeAggregation<int>(
         case parser::AggregateType::COUNT:
             return static_cast<int64_t>(data.size());
         case parser::AggregateType::SUM: {
-            int64_t sum = std::accumulate(data.begin(), data.end(), 0);
-            return sum;
+            // cpu version
+            // int64_t sum = std::accumulate(data.begin(), data.end(), 0);
+            //////////////////////////////////////////////////////
+            // gpu version
+            int sum = parallel_sum(data);
+            return static_cast<int64_t>(sum);
         }
         case parser::AggregateType::AVG: {
-            double sum = std::accumulate(data.begin(), data.end(), 0.0);
-            return sum / data.size();
+            // cpu version
+            // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+            //////////////////////////////////////////////////////
+            // gpu version
+            int sum = parallel_sum(data);
+            return (double)sum / data.size();
         }
         case parser::AggregateType::MIN:
-            return static_cast<int64_t>(*std::min_element(data.begin(), data.end()));
+            // cpu version
+            // return static_cast<int64_t>(*std::min_element(data.begin(), data.end()));
+            //////////////////////////////////////////////////////
+            // gpu version
+            return static_cast<int64_t>(parallel_min(data));
         case parser::AggregateType::MAX:
-            return static_cast<int64_t>(*std::max_element(data.begin(), data.end()));
+            // cpu version
+            // return static_cast<int64_t>(*std::max_element(data.begin(), data.end()));
+            //////////////////////////////////////////////////////
+            // gpu version
+            return static_cast<int64_t>(parallel_max(data));
         default:
             throw std::runtime_error("Unsupported aggregate type");
     }
@@ -294,17 +365,33 @@ Value AggregateOperator::computeAggregation<double>(
         case parser::AggregateType::COUNT:
             return static_cast<int64_t>(data.size());
         case parser::AggregateType::SUM: {
-            double sum = std::accumulate(data.begin(), data.end(), 0.0);
+            // cpu version
+            // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+            //////////////////////////////////////////////////////
+            // gpu version
+            double sum = parallel_sum(data);
             return sum;
         }
         case parser::AggregateType::AVG: {
-            double sum = std::accumulate(data.begin(), data.end(), 0.0);
+            // cpu version
+            // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+            //////////////////////////////////////////////////////
+            // gpu version
+            double sum = parallel_sum(data);
             return sum / data.size();
         }
         case parser::AggregateType::MIN:
-            return *std::min_element(data.begin(), data.end());
+            // cpu version
+            // return *std::min_element(data.begin(), data.end());
+            //////////////////////////////////////////////////////
+            // gpu version
+            return parallel_min(data);
         case parser::AggregateType::MAX:
-            return *std::max_element(data.begin(), data.end());
+            // cpu version
+            // return *std::max_element(data.begin(), data.end());
+            //////////////////////////////////////////////////////
+            // gpu version
+            return parallel_max(data);
         default:
             throw std::runtime_error("Unsupported aggregate type");
     }
@@ -322,9 +409,17 @@ Value AggregateOperator::computeAggregation<std::string>(
         case parser::AggregateType::COUNT:
             return static_cast<int64_t>(data.size());
         case parser::AggregateType::MIN:
-            return *std::min_element(data.begin(), data.end());
+            // cpu version
+            // return *std::min_element(data.begin(), data.end());
+            //////////////////////////////////////////////////////
+            // gpu version
+            return parallel_min(data);
         case parser::AggregateType::MAX:
-            return *std::max_element(data.begin(), data.end());
+            // cpu version
+            // return *std::max_element(data.begin(), data.end());
+            /////////////////////////////////////////////////////
+            // gpu version
+            return parallel_max(data);
         default:
             throw std::runtime_error("Operation not supported for string columns");
     }

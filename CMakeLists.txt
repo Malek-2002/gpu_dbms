@@ -24,7 +24,7 @@ set(SOURCE_FILES
 
 # Add CUDA file separately
 set(CUDA_SOURCES
-    src/execution/gpu/reduction.cu  # Adjust path as needed
+    src/execution/gpu/aggregate.cu  # Adjust path as needed
 )
 
 # Define include directories
