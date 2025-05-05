@@ -3,6 +3,13 @@
 #include <numeric>
 #include <limits>
 #include <stdexcept>
+#include <iostream>
+
+// include extern function that calls CUDA kernel
+// long version
+extern long parallel_sum(const std::vector<long>& data);
+// double version
+extern double parallel_sum(const std::vector<double>& data);
 
 namespace gpu_dbms {
 namespace execution {
@@ -162,11 +169,21 @@ Value AggregateOperator::computeSum(const storage::ColumnData& col_data) const {
     if (std::holds_alternative<storage::IntColumn>(col_data)) {
         const auto& data = std::get<storage::IntColumn>(col_data);
         // Accumulate as double to ensure FLOAT output
-        double sum = std::accumulate(data.begin(), data.end(), 0.0);
-        return sum;
+        // cpu version
+        // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+        ///////////////////////////////////////////////////////////////////////
+        // gpu version
+        // extern function that calls CUDA kernel
+        long sum = parallel_sum(data);
+        return (double)sum;
     } else if (std::holds_alternative<storage::FloatColumn>(col_data)) {
         const auto& data = std::get<storage::FloatColumn>(col_data);
-        double sum = std::accumulate(data.begin(), data.end(), 0.0);
+        // cpu version
+        // double sum = std::accumulate(data.begin(), data.end(), 0.0);
+        ////////////////////////////////////////////////////////////////
+        // gpu version
+        // extern function that calls CUDA kernel
+        double sum = parallel_sum(data);
         return sum;
     } else {
         throw std::runtime_error("SUM can only be applied to numeric columns");

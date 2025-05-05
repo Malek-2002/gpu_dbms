@@ -66,7 +66,8 @@
         "mutex": "cpp",
         "semaphore": "cpp",
         "stop_token": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "xutility": "cpp"
     },
-    "cmake.sourceDirectory": "/home/malek/work/gpu_dbms"
+    "cmake.sourceDirectory": "C:/Users/ASUS/Documents/GitHub/gpu_dbms"
 }
