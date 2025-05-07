@@ -86,6 +86,12 @@ SELECT * FROM employees WHERE salary >  100000;
 ### WHERE
 
 
+### AGG
+
+```sql
+SELECT sum(employee_id) as sum_1 FROM employees;
+```
+
 ### ORDER BY
 
 First load table
