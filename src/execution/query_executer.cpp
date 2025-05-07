@@ -11,8 +11,6 @@
 namespace gpu_dbms {
 namespace execution {
 
-// Enhanced implementation of the QueryExecutor class
-
 QueryExecutor::QueryExecutor(storage::Catalog& catalog) : catalog_(catalog) {}
 
 std::shared_ptr<Result> QueryExecutor::execute(std::shared_ptr<parser::QueryModel> query_model) {
@@ -83,10 +81,8 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                         break;
                     case parser::AggregateType::MIN:
                     case parser::AggregateType::MAX: {
-                        // Get type from the underlying column expression
                         if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(agg_expr->expr)) {
                             std::string table_name;
-                            // Find the real table name from the query model
                             for (const auto& table : query_model->tables) {
                                 if (table.alias == col_expr->column.alias || 
                                     (col_expr->column.alias.empty() && table.table_name == col_expr->column.table_name)) {
@@ -111,7 +107,6 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             } else if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(expr)) {
                 col_name = col_expr->alias.empty() ? col_expr->column.column_name : col_expr->alias;
                 
-                // Find the real table name from the query model
                 std::string table_name;
                 for (const auto& table : query_model->tables) {
                     if (table.alias == col_expr->column.alias || 
@@ -131,7 +126,6 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                 throw std::runtime_error("Unsupported expression in select list");
             }
 
-            // Fix: Create ColumnInfo with only the members it actually has
             storage::ColumnInfo col_info{col_name, col_type, false};
             output_schema->addColumn(col_info);
         }
@@ -144,18 +138,12 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                 output_schema->addColumn(col_info);
             }
         } else {
-            // Multiple tables: create combined schema
+            // Multiple tables: create combined schema without prefixing
             for (const auto& table_ref : query_model->tables) {
                 auto table_schema = catalog_.getSchema(table_ref.table_name);
                 for (const auto& col_info : table_schema->getColumns()) {
-                    // Add prefix to avoid column name conflicts
-                    std::string prefixed_name = table_ref.alias.empty() ? 
-                        table_ref.table_name + "." + col_info.name : 
-                        table_ref.alias + "." + col_info.name;
-                    
-                    // Fix: Create ColumnInfo with only the members it actually has
                     storage::ColumnInfo new_col_info{
-                        prefixed_name, col_info.type, col_info.is_primary_key
+                        col_info.name, col_info.type, col_info.is_primary_key
                     };
                     output_schema->addColumn(new_col_info);
                 }
@@ -163,15 +151,13 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
         }
     }
 
-    // // Debug: Print output schema
-    // std::cerr << "buildQueryPlan: Output schema columns: ";
-    // for (const auto& col : output_schema->getColumns()) {
-    //     std::cerr << col.name << " ";
-    // }
-    // std::cerr << std::endl;
+    // Debug: Print output schema
+    std::cerr << "buildQueryPlan: Output schema columns: ";
+    for (const auto& col : output_schema->getColumns()) {
+        std::cerr << col.name << " ";
+    }
+    std::cerr << std::endl;
 
-    // Now let's build the execution plan
-    
     // Step 1: Start with base table operators (one per table)
     std::unordered_map<std::string, std::shared_ptr<Operator>> table_operators;
     std::unordered_map<std::string, std::shared_ptr<storage::Schema>> table_schemas;
@@ -179,17 +165,75 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
     for (const auto& table_ref : query_model->tables) {
         std::string table_key = table_ref.alias.empty() ? table_ref.table_name : table_ref.alias;
         auto table_schema = catalog_.getSchema(table_ref.table_name);
-        table_schemas[table_key] = output_schema; // Use output_schema for SelectOperator
-        // Create a basic select operator for each table
-        auto select_op = std::make_shared<SelectOperator>(catalog_, table_ref, output_schema);
+        // Create table-specific schema for SelectOperator
+        auto select_schema = std::make_shared<storage::Schema>(table_key + "_select");
+        if (!is_select_star && !query_model->select_list.empty()) {
+            for (const auto& expr : query_model->select_list) {
+                if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(expr)) {
+                    std::string col_table = col_expr->column.alias.empty() ? col_expr->column.table_name : col_expr->column.alias;
+                    // Debug: Trace column and table info
+                    std::cerr << "Processing column: " << col_expr->column.column_name 
+                              << ", col_table: " << col_table 
+                              << ", table_key: " << table_key 
+                              << ", table_name: " << table_ref.table_name << std::endl;
+                    // Include column if it belongs to this table or table is the only one
+                    if (col_table == table_ref.table_name || 
+                        col_table == table_key || 
+                        (query_model->tables.size() == 1 && col_table.empty())) {
+                        auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                        if (!select_schema->hasColumn(col_info.name)) {
+                            select_schema->addColumn(col_info);
+                        }
+                    }
+                }
+            }
+        } else {
+            // For SELECT *, include all columns from this table
+            for (const auto& col_info : table_schema->getColumns()) {
+                select_schema->addColumn(col_info);
+            }
+        }
+        // Include join keys for tables involved in joins
+        for (const auto& [join_tables, cond_idx] : query_model->join_conditions) {
+            for (const auto& table : join_tables) {
+                if (table.alias == table_key || table.table_name == table_ref.table_name) {
+                    if (auto bin_expr = std::dynamic_pointer_cast<parser::BinaryExpression>(query_model->conditions[cond_idx])) {
+                        if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(bin_expr->left)) {
+                            if (col_expr->column.alias == table_key || col_expr->column.table_name == table_ref.table_name) {
+                                auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                                if (!select_schema->hasColumn(col_info.name)) {
+                                    select_schema->addColumn(col_info);
+                                }
+                            }
+                        }
+                        if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(bin_expr->right)) {
+                            if (col_expr->column.alias == table_key || col_expr->column.table_name == table_ref.table_name) {
+                                auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                                if (!select_schema->hasColumn(col_info.name)) {
+                                    select_schema->addColumn(col_info);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Debug: Print select schema
+        std::cerr << "Select schema for " << table_key << ": ";
+        for (const auto& col : select_schema->getColumns()) {
+            std::cerr << col.name << " ";
+        }
+        std::cerr << std::endl;
+
+        table_schemas[table_key] = select_schema;
+        auto select_op = std::make_shared<SelectOperator>(catalog_, table_ref, select_schema);
         table_operators[table_key] = select_op;
         
         // Apply table-specific filters if any
         auto it = query_model->table_specific_conditions.find(table_key);
         if (it != query_model->table_specific_conditions.end()) {
-            // Only apply filters that are specific to this table and not join conditions
             for (const auto& cond_idx : it->second) {
-                // Check if this is not a join condition (i.e., only references this table)
                 bool is_join_condition = false;
                 for (const auto& [join_tables, join_idx] : query_model->join_conditions) {
                     if (join_idx == cond_idx) {
@@ -201,7 +245,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                 if (!is_join_condition) {
                     auto filter_expr = query_model->conditions[cond_idx];
                     auto filter_op = std::make_shared<FilterOperator>(
-                        catalog_, table_ref, filter_expr, output_schema);
+                        catalog_, table_ref, filter_expr, select_schema);
                     filter_op->setInput(std::shared_ptr<Result>());
                     table_operators[table_key] = filter_op;
                 }
@@ -212,31 +256,23 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
     // Step 2: Process joins if there are multiple tables
     std::shared_ptr<Operator> last_operator;
     if (query_model->tables.size() > 1) {
-        // We need to build join operators
-        // Start with the first table
         std::string current_table_key = query_model->tables[0].alias.empty() ? 
             query_model->tables[0].table_name : query_model->tables[0].alias;
         last_operator = table_operators[current_table_key];
-        plan->addOperator(last_operator); // Add the first table's operator
+        plan->addOperator(last_operator);
         
-        // Create schema for the joined result
         auto joined_schema = std::make_shared<storage::Schema>("joined_result");
-        
-        // Add columns from the first table
         for (const auto& col_info : table_schemas[current_table_key]->getColumns()) {
             joined_schema->addColumn(col_info);
         }
         
-        // For each additional table, create a join operator
         for (size_t i = 1; i < query_model->tables.size(); ++i) {
             const auto& right_table_ref = query_model->tables[i];
             std::string right_table_key = right_table_ref.alias.empty() ? 
                 right_table_ref.table_name : right_table_ref.alias;
             
-            // Find join condition for these tables
             std::shared_ptr<parser::Expression> join_condition = nullptr;
             for (const auto& [join_tables, cond_idx] : query_model->join_conditions) {
-                // Check if this join condition involves both tables
                 bool involves_both_tables = false;
                 bool involves_current_table = false;
                 bool involves_right_table = false;
@@ -259,48 +295,40 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             }
             
             if (!join_condition) {
-                // If no explicit join condition was found, use a cross join
-                // or throw an error if explicit join conditions are required
                 throw std::runtime_error("No join condition found between tables " + 
                                          current_table_key + " and " + right_table_key);
             }
             
-            // Add columns from the right table to the joined schema
             for (const auto& col_info : table_schemas[right_table_key]->getColumns()) {
                 joined_schema->addColumn(col_info);
             }
             
-            // Create join operator
             auto join_op = std::make_shared<JoinOperator>(
                 catalog_,
-                query_model->tables[i-1],  // Left table
-                right_table_ref,          // Right table
+                query_model->tables[i-1],
+                right_table_ref,
                 join_condition,
                 table_schemas[current_table_key],
                 table_schemas[right_table_key],
                 joined_schema
             );
             
-            // Update the current table for the next iteration
             current_table_key = "joined_" + std::to_string(i);
             table_schemas[current_table_key] = joined_schema;
             last_operator = join_op;
-            plan->addOperator(last_operator); // Add join operator
+            plan->addOperator(last_operator);
         }
     } else {
-        // Single table query - use the table operator directly
         std::string table_key = query_model->tables[0].alias.empty() ? 
             query_model->tables[0].table_name : query_model->tables[0].alias;
         last_operator = table_operators[table_key];
-        plan->addOperator(last_operator); // Add select operator
+        plan->addOperator(last_operator);
     }
     
     // Step 3: Apply global filter conditions (WHERE clause)
     if (query_model->where_clause && !query_model->conditions.empty()) {
-        // Create a global filter for any conditions not handled by table-specific filters or joins
         std::vector<size_t> handled_conditions;
         
-        // Collect all condition indices that have been handled
         for (const auto& [table_key, cond_indices] : query_model->table_specific_conditions) {
             for (const auto& idx : cond_indices) {
                 handled_conditions.push_back(idx);
@@ -311,10 +339,8 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             handled_conditions.push_back(cond_idx);
         }
         
-        // Create a set for faster lookup
         std::set<size_t> handled_set(handled_conditions.begin(), handled_conditions.end());
         
-        // Find unhandled conditions
         std::vector<std::shared_ptr<parser::Expression>> unhandled_conditions;
         for (size_t i = 0; i < query_model->conditions.size(); ++i) {
             if (handled_set.find(i) == handled_set.end()) {
@@ -322,9 +348,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             }
         }
         
-        // If there are unhandled conditions, create a global filter
         if (!unhandled_conditions.empty()) {
-            // Combine unhandled conditions with AND
             std::shared_ptr<parser::Expression> combined_expr = unhandled_conditions[0];
             for (size_t i = 1; i < unhandled_conditions.size(); ++i) {
                 auto logical_expr = std::make_shared<parser::LogicalExpression>();
@@ -334,17 +358,16 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                 combined_expr = logical_expr;
             }
             
-            // Create the global filter operator
             auto filter_op = std::make_shared<FilterOperator>(
                 catalog_, 
-                query_model->tables[0],  // Use first table for reference (not important here)
+                query_model->tables[0],
                 combined_expr,
                 last_operator->getOutputSchema()
             );
             
-            filter_op->setInput(std::shared_ptr<Result>()); // Will be set during execution
+            filter_op->setInput(std::shared_ptr<Result>());
             last_operator = filter_op;
-            plan->addOperator(last_operator); // Add filter operator
+            plan->addOperator(last_operator);
         }
     }
     
@@ -356,9 +379,9 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             last_operator->getOutputSchema(),
             output_schema
         );
-        agg_op->setInput(std::shared_ptr<Result>());  // Will be set during execution
+        agg_op->setInput(std::shared_ptr<Result>());
         last_operator = agg_op;
-        plan->addOperator(last_operator); // Add aggregate operator
+        plan->addOperator(last_operator);
     }
     
     // Add SortOperator if ORDER BY clause is present
@@ -368,7 +391,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             last_operator->getOutputSchema()
         );
         last_operator = sort_op;
-        plan->addOperator(last_operator); // Add sort operator
+        plan->addOperator(last_operator);
     }
     
     return plan;
@@ -379,7 +402,6 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
         throw std::runtime_error("QueryExecutor: Null query plan");
     }
     
-    // Initialize result map for each table
     std::unordered_map<std::string, std::shared_ptr<Result>> table_results;
     for (const auto& table_ref : query_model->tables) {
         std::string table_key = table_ref.alias.empty() ? table_ref.table_name : table_ref.alias;
@@ -393,22 +415,14 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
         table_results[table_key] = result;
     }
     
-    // Get all operators from the plan
     const auto& operators = plan->getOperators();
     if (operators.empty()) {
         throw std::runtime_error("QueryExecutor: No operators in plan");
     }
     
-    // Improved execution logic for handling joins
     std::shared_ptr<Result> current_result;
     std::unordered_map<std::string, std::shared_ptr<Result>> intermediate_results;
     
-    // // First, initialize with base table results
-    // for (const auto& [key, result] : table_results) {
-    //     intermediate_results[key] = result;
-    // }
-    
-    // Execute operators in sequence, tracking intermediate results
     for (const auto& op : operators) {
         if (auto select_op = std::dynamic_pointer_cast<SelectOperator>(op)) {
             std::string table_key = select_op->getTableRef().alias.empty() ? 
@@ -416,6 +430,7 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
             current_result = table_results[table_key];
             select_op->setInput(current_result);
             current_result = select_op->execute();
+            intermediate_results[table_key] = current_result;
         } else if (auto join_op = std::dynamic_pointer_cast<JoinOperator>(op)) {
             std::string left_key = join_op->getLeftTableRef().alias.empty() ? 
                 join_op->getLeftTableRef().table_name : join_op->getLeftTableRef().alias;
@@ -423,8 +438,11 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
                 join_op->getRightTableRef().table_name : join_op->getRightTableRef().alias;
             
             join_op->setLeftInput(intermediate_results[left_key]);
-            join_op->setRightInput(table_results[right_key]);
+            join_op->setRightInput(intermediate_results[right_key] ? intermediate_results[right_key] : table_results[right_key]);
             current_result = join_op->execute();
+            
+            // Debug: Print join result rows
+            std::cerr << "JoinOperator: Output rows: " << current_result->getData()->numRows() << std::endl;
             
             intermediate_results["joined_" + std::to_string(intermediate_results.size())] = current_result;
         } else {
@@ -433,14 +451,13 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
         }
     }
     
-    // // Debug: Print current result schema before projection
-    // std::cerr << "executePlan: Current result schema columns: ";
-    // for (const auto& col : current_result->getSchema()->getColumns()) {
-    //     std::cerr << col.name << " ";
-    // }
-    // std::cerr << std::endl;
+    // Debug: Print current result schema before projection
+    std::cerr << "executePlan: Current result schema columns: ";
+    for (const auto& col : current_result->getSchema()->getColumns()) {
+        std::cerr << col.name << " ";
+    }
+    std::cerr << std::endl;
 
-    // Ensure output only includes select_list columns
     if (!query_model->select_list.empty() && 
         !(query_model->select_list.size() == 1 && 
           !std::dynamic_pointer_cast<parser::ColumnExpression>(query_model->select_list[0]) &&
@@ -484,7 +501,6 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
             final_table->addColumn(col_name, std::move(output_col));
         }
         
-        // Copy only selected columns
         ExpressionEvaluator evaluator(current_result->getData());
         for (size_t row = 0; row < final_table->numRows(); ++row) {
             size_t col_idx = 0;
@@ -516,12 +532,12 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
         final_result->setData(final_table);
         current_result = final_result;
 
-        // // Debug: Print final result schema
-        // std::cerr << "executePlan: Final result schema columns: ";
-        // for (const auto& col : final_result->getSchema()->getColumns()) {
-        //     std::cerr << col.name << " ";
-        // }
-        // std::cerr << std::endl;
+        // Debug: Print final result schema
+        std::cerr << "executePlan: Final result schema columns: ";
+        for (const auto& col : final_result->getSchema()->getColumns()) {
+            std::cerr << col.name << " ";
+        }
+        std::cerr << std::endl;
     }
     
     return current_result;

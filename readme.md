@@ -74,10 +74,17 @@ Then you can try
 ```sql
 SELECT name FROM employees;
 
+SELECT e.name FROM employees as e;
+
 SELECT employee_id, name FROM employees;
 
 SELECT * FROM employees;
+
+SELECT * FROM employees WHERE salary >  100000;
 ```
+
+### WHERE
+
 
 ### ORDER BY
 
@@ -111,4 +118,7 @@ Then you can try
 
 ```sql
 SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id;
+
+
+-- SELECT e.name, e.salary, e.department_id, d.department_name FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000;
 ```
