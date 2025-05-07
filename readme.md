@@ -61,6 +61,24 @@ SELECT employee_id, name, salary, age FROM employees ORDER BY age;
 ```
 
 ## Sample Queries
+### SELECT
+
+First load table
+
+```bash
+.load ../test_csv_files/employees.csv employees
+```
+
+Then you can try
+
+```sql
+SELECT name FROM employees;
+
+SELECT employee_id, name FROM employees;
+
+SELECT * FROM employees;
+```
+
 ### ORDER BY
 
 First load table

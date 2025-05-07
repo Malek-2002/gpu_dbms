@@ -17,6 +17,7 @@ public:
     std::shared_ptr<Result> execute() override;
     void setInput(std::shared_ptr<Result> input) override;
     std::shared_ptr<storage::Schema> getOutputSchema() const override;
+    const parser::TableRef& getTableRef() const; // Added getter for table_ref_
 
 private:
     storage::Catalog& catalog_;
