@@ -3,7 +3,9 @@
 #include "execution/operators/filter_operator.hpp"
 #include "execution/operators/aggregate_operator.hpp"
 #include "execution/operators/join_operator.hpp"
+#include "execution/operators/sort_operator.hpp"
 #include <stdexcept>
+#include <set>
 
 namespace gpu_dbms {
 namespace execution {
@@ -337,6 +339,16 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
         );
         agg_op->setInput(std::shared_ptr<Result>());  // Will be set during execution
         last_operator = agg_op;
+    }
+    
+    // Add SortOperator if ORDER BY clause is present
+    if (!query_model->order_by.empty()) {
+        auto sort_op = std::make_shared<SortOperator>(
+            query_model->order_by,
+            last_operator->getOutputSchema()
+        );
+        sort_op->setInput(std::shared_ptr<Result>());
+        last_operator = sort_op;
     }
     
     // Add the final operator to the plan
