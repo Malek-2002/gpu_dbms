@@ -11,30 +11,28 @@
 namespace gpu_dbms {
 namespace parser {
 
+// Forward declarations for helper functions
+std::vector<std::shared_ptr<Expression>> flattenAndConditions(std::shared_ptr<Expression> expr);
+std::vector<TableRef> getTableRefsFromExpression(std::shared_ptr<Expression> expr, const std::vector<TableRef>& tables, const std::unordered_map<std::string, std::string>& alias_to_table_map);
+
 class SQLParserWrapper {
 public:
     SQLParserWrapper();
     ~SQLParserWrapper();
-
-    // Parse SQL query string
+    
     bool parse(const std::string& query);
-    
-    // Get parsed query model
     std::shared_ptr<QueryModel> getQueryModel() const;
-    
-    // Get error message if parsing failed
     std::string getErrorMsg() const;
-
-    // Print the AST of the parsed query
-    void printModel(int indent_level = 0) const;
-
-private:
-    // Convert hsql::SQLParserResult to our QueryModel
-    void convertToQueryModel(const hsql::SQLParserResult& result);
     
+    void printModel(int indent_level) const;
+    
+private:
     std::shared_ptr<QueryModel> query_model_;
     std::string error_msg_;
+    
+    void convertToQueryModel(const hsql::SQLParserResult& result);
 };
+
 
 } // namespace parser
 } // namespace gpu_dbms

@@ -1,28 +1,41 @@
 #pragma once
 
-#include <memory>
 #include "execution/operators/operator.hpp"
-#include "parser/query_model.hpp"
-#include "storage/schema.hpp"
+#include "parser/sql_parser.hpp"
+#include "storage/catalog.hpp"
+#include "execution/expression_evaluator.hpp"
 
 namespace gpu_dbms {
 namespace execution {
 
-class JoinOperator : public Operator {
+class JoinOperator : public Operator { // Inherit from Operator
 public:
-    JoinOperator(parser::JoinType join_type,
-                 std::shared_ptr<parser::Expression> join_condition,
-                 std::shared_ptr<storage::Schema> left_schema,
-                 std::shared_ptr<storage::Schema> right_schema);
-    
-    std::shared_ptr<Result> execute() override;
-    void setInput(std::shared_ptr<Result> input) override;
-    void setRightInput(std::shared_ptr<Result> right_input);
+    JoinOperator(
+        storage::Catalog& catalog,
+        const parser::TableRef& left_table,
+        const parser::TableRef& right_table,
+        std::shared_ptr<parser::Expression> condition,
+        std::shared_ptr<storage::Schema> left_schema,
+        std::shared_ptr<storage::Schema> right_schema,
+        std::shared_ptr<storage::Schema> output_schema
+    );
+
     std::shared_ptr<storage::Schema> getOutputSchema() const override;
 
+    void setInput(std::shared_ptr<Result> input) override;
+    void setLeftInput(std::shared_ptr<Result> input);
+    void setRightInput(std::shared_ptr<Result> input);
+
+    const parser::TableRef& getLeftTableRef() const;
+    const parser::TableRef& getRightTableRef() const;
+
+    std::shared_ptr<Result> execute() override;
+
 private:
-    parser::JoinType join_type_;
-    std::shared_ptr<parser::Expression> join_condition_;
+    storage::Catalog& catalog_;
+    const parser::TableRef& left_table_;
+    const parser::TableRef& right_table_;
+    std::shared_ptr<parser::Expression> condition_;
     std::shared_ptr<storage::Schema> left_schema_;
     std::shared_ptr<storage::Schema> right_schema_;
     std::shared_ptr<storage::Schema> output_schema_;
