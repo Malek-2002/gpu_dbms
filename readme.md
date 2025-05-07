@@ -99,11 +99,13 @@ SELECT * FROM employees WHERE name = 'Emma Johnson';
 SELECT * FROM employees WHERE name != 'Emma Johnson';
 ```
 
+SELECT AVG(e.Salary) AS AverageSalary FROM Employees e
+
 
 ### AGG
 
 ```sql
--- SELECT sum(employee_id) as sum_1 FROM employees;
+SELECT sum(employee_id) as sum_1 FROM employees;
 ```
 
 ### ORDER BY
@@ -130,8 +132,10 @@ SELECT age, salary FROM employees ORDER BY age ASC, salary DESC;
 
 First load tables
 ```bash
+
 .load ../test_csv_files/employees.csv employees
 .load ../test_csv_files/departments.csv departments
+
 ```
 
 Then you can try
@@ -140,6 +144,8 @@ Then you can try
 SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id;
 
 SELECT e.name, e.salary FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 140000;
+
+-- SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 140000;
 
 SELECT e.name, e.salary, e.age FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000 AND e.age < 30;
 ```

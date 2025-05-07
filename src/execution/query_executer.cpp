@@ -169,6 +169,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
         auto select_schema = std::make_shared<storage::Schema>(table_key + "_select");
         if (!is_select_star && !query_model->select_list.empty()) {
             for (const auto& expr : query_model->select_list) {
+                // NOTE: FIX ME
                 if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(expr)) {
                     std::string col_table = col_expr->column.alias.empty() ? col_expr->column.table_name : col_expr->column.alias;
                     // Debug: Trace column and table info
@@ -183,6 +184,30 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                         auto col_info = table_schema->getColumn(col_expr->column.column_name);
                         if (!select_schema->hasColumn(col_info.name)) {
                             select_schema->addColumn(col_info);
+                        }
+                    }
+                } else if (auto agg_expr = std::dynamic_pointer_cast<parser::AggregateExpression>(expr)) {
+                    // Handle aggregate expressions
+                    if (auto agg_col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(agg_expr->expr)) {
+                        std::string agg_col_table = agg_col_expr->column.alias.empty() ? 
+                                                    agg_col_expr->column.table_name : agg_col_expr->column.alias;
+                        
+                        // Include column if it belongs to this table or table is the only one
+                        if (agg_col_table == table_ref.table_name || 
+                            agg_col_table == table_key || 
+                            (query_model->tables.size() == 1 && agg_col_table.empty())) {
+                            auto col_info = table_schema->getColumn(agg_col_expr->column.column_name);
+                            if (!select_schema->hasColumn(col_info.name)) {
+                                select_schema->addColumn(col_info);
+                            }
+                        }
+                    } else if (query_model->tables.size() == 1) {
+                        // For COUNT(*) or other non-column aggregates, include in single table queries
+                        // For simplicity, if there's only one table, we'll add a dummy column to ensure 
+                        // the select schema is not empty
+                        auto any_col_info = table_schema->getColumns()[0];
+                        if (!select_schema->hasColumn(any_col_info.name)) {
+                            select_schema->addColumn(any_col_info);
                         }
                     }
                 }
@@ -540,6 +565,9 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
             std::string col_name;
             if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(query_model->select_list[i])) {
                 col_name = col_expr->alias.empty() ? col_expr->column.column_name : col_expr->alias;
+            } else if (auto agg_expr = std::dynamic_pointer_cast<parser::AggregateExpression>(query_model->select_list[i])) {
+                // Use the alias of the aggregate expression if available
+                col_name = agg_expr->alias.empty() ? "agg_" + std::to_string(i) : agg_expr->alias;
             } else {
                 col_name = "expr_" + std::to_string(i);
             }
@@ -550,58 +578,61 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
         auto final_result = std::make_shared<Result>(final_schema);
         auto final_table = std::make_shared<storage::Table>(final_schema);
         
-        for (const auto& col_info : final_schema->getColumns()) {
-            const auto& col_name = col_info.name;
-            storage::ColumnData output_col;
-            
-            switch (col_info.type) {
-                case storage::DataType::INT:
-                    output_col = storage::IntColumn(current_result->getData()->numRows());
-                    break;
-                case storage::DataType::FLOAT:
-                    output_col = storage::FloatColumn(current_result->getData()->numRows());
-                    break;
-                case storage::DataType::STRING:
-                    output_col = storage::StringColumn(current_result->getData()->numRows());
-                    break;
-                case storage::DataType::BOOLEAN:
-                    output_col = storage::BoolColumn(current_result->getData()->numRows());
-                    break;
-                default:
-                    throw std::runtime_error("Unsupported column type: " + col_name);
-            }
-            
-            final_table->addColumn(col_name, std::move(output_col));
+    // Initialize columns in the final table
+    for (const auto& col_info : final_schema->getColumns()) {
+        const auto& col_name = col_info.name;
+        storage::ColumnData output_col;
+
+        switch (col_info.type) {
+            case storage::DataType::INT:
+                output_col = storage::IntColumn(current_result->getData()->numRows());
+                break;
+            case storage::DataType::FLOAT:
+                output_col = storage::FloatColumn(current_result->getData()->numRows());
+                break;
+            case storage::DataType::STRING:
+                output_col = storage::StringColumn(current_result->getData()->numRows());
+                break;
+            case storage::DataType::BOOLEAN:
+                output_col = storage::BoolColumn(current_result->getData()->numRows());
+                break;
+            default:
+                throw std::runtime_error("Unsupported column type: " + col_name);
         }
-        
-        ExpressionEvaluator evaluator(current_result->getData());
-        for (size_t row = 0; row < final_table->numRows(); ++row) {
-            size_t col_idx = 0;
-            for (const auto& expr : query_model->select_list) {
-                const auto& col_name = final_schema->getColumns()[col_idx].name;
+
+        final_table->addColumn(col_name, std::move(output_col));
+    }
+
+        // Copy data directly from current_result to final_table
+        for (size_t row = 0; row < current_result->getData()->numRows(); ++row) {
+            for (const auto& col_info : final_schema->getColumns()) {
+                const auto& col_name = col_info.name;
                 auto& result_col = final_table->getColumn(col_name);
-                Value val = evaluator.evaluate(expr.get(), row);
-                
-                switch (final_schema->getColumns()[col_idx].type) {
+                const auto& input_col = current_result->getData()->getColumn(col_name);
+
+                switch (col_info.type) {
                     case storage::DataType::INT:
-                        std::get<storage::IntColumn>(result_col)[row] = std::holds_alternative<int64_t>(val) ? std::get<int64_t>(val) : 0;
+                        std::get<storage::IntColumn>(result_col)[row] = 
+                            std::get<storage::IntColumn>(input_col)[row];
                         break;
                     case storage::DataType::FLOAT:
-                        std::get<storage::FloatColumn>(result_col)[row] = std::holds_alternative<double>(val) ? std::get<double>(val) : 0.0;
+                        std::get<storage::FloatColumn>(result_col)[row] = 
+                            std::get<storage::FloatColumn>(input_col)[row];
                         break;
                     case storage::DataType::STRING:
-                        std::get<storage::StringColumn>(result_col)[row] = std::holds_alternative<std::string>(val) ? std::get<std::string>(val) : "";
+                        std::get<storage::StringColumn>(result_col)[row] = 
+                            std::get<storage::StringColumn>(input_col)[row];
                         break;
                     case storage::DataType::BOOLEAN:
-                        std::get<storage::BoolColumn>(result_col)[row] = std::holds_alternative<bool>(val) ? std::get<bool>(val) : false;
+                        std::get<storage::BoolColumn>(result_col)[row] = 
+                            std::get<storage::BoolColumn>(input_col)[row];
                         break;
                     default:
-                        throw std::runtime_error("Unsupported column type in final copy");
+                        throw std::runtime_error("Unsupported column type in final copy: " + col_name);
                 }
-                ++col_idx;
             }
         }
-        
+
         final_result->setData(final_table);
         current_result = final_result;
 
