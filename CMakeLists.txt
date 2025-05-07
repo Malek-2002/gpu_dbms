@@ -20,6 +20,7 @@ set(SOURCE_FILES
     src/execution/operators/select_operator.cpp
     src/execution/operators/filter_operator.cpp
     src/execution/operators/aggregate_operator.cpp
+    src/execution/operators/join_operator.cpp
 )
 
 # Add CUDA file separately
