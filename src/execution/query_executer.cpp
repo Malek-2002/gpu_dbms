@@ -6,7 +6,7 @@
 #include "execution/operators/sort_operator.hpp"
 #include <stdexcept>
 #include <set>
-// #include <iostream>
+#include <iostream>
 
 namespace gpu_dbms {
 namespace execution {
@@ -217,6 +217,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
         std::string current_table_key = query_model->tables[0].alias.empty() ? 
             query_model->tables[0].table_name : query_model->tables[0].alias;
         last_operator = table_operators[current_table_key];
+        plan->addOperator(last_operator); // Add the first table's operator
         
         // Create schema for the joined result
         auto joined_schema = std::make_shared<storage::Schema>("joined_result");
@@ -284,12 +285,14 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             current_table_key = "joined_" + std::to_string(i);
             table_schemas[current_table_key] = joined_schema;
             last_operator = join_op;
+            plan->addOperator(last_operator); // Add join operator
         }
     } else {
         // Single table query - use the table operator directly
         std::string table_key = query_model->tables[0].alias.empty() ? 
             query_model->tables[0].table_name : query_model->tables[0].alias;
         last_operator = table_operators[table_key];
+        plan->addOperator(last_operator); // Add select operator
     }
     
     // Step 3: Apply global filter conditions (WHERE clause)
@@ -341,6 +344,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             
             filter_op->setInput(std::shared_ptr<Result>()); // Will be set during execution
             last_operator = filter_op;
+            plan->addOperator(last_operator); // Add filter operator
         }
     }
     
@@ -354,6 +358,7 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
         );
         agg_op->setInput(std::shared_ptr<Result>());  // Will be set during execution
         last_operator = agg_op;
+        plan->addOperator(last_operator); // Add aggregate operator
     }
     
     // Add SortOperator if ORDER BY clause is present
@@ -362,12 +367,9 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
             query_model->order_by,
             last_operator->getOutputSchema()
         );
-        sort_op->setInput(std::shared_ptr<Result>());
         last_operator = sort_op;
+        plan->addOperator(last_operator); // Add sort operator
     }
-    
-    // Add the final operator to the plan
-    plan->addOperator(last_operator);
     
     return plan;
 }
@@ -484,7 +486,7 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
         
         // Copy only selected columns
         ExpressionEvaluator evaluator(current_result->getData());
-        for (size_t row = 0; row < current_result->getData()->numRows(); ++row) {
+        for (size_t row = 0; row < final_table->numRows(); ++row) {
             size_t col_idx = 0;
             for (const auto& expr : query_model->select_list) {
                 const auto& col_name = final_schema->getColumns()[col_idx].name;

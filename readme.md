@@ -90,11 +90,25 @@ First load table
 Then you can try
 
 ```sql
-SELECT employee_id, name, salary, age FROM employees ORDER BY age;
+SELECT employee_id, name, age FROM employees ORDER BY age;
 
 SELECT employee_id, name, salary, age FROM employees ORDER BY name;
 
 SELECT employee_id, name, salary, age FROM employees ORDER BY salary DESC;
 
-SELECT employee_id, name, salary, age FROM employees ORDER BY age ASC, salary DESC;
+SELECT age, salary FROM employees ORDER BY age ASC, salary DESC;
+```
+
+### JOIN
+
+First load tables
+```bash
+.load ../test_csv_files/employees.csv employees
+.load ../test_csv_files/departments.csv departments
+```
+
+Then you can try
+
+```sql
+SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id;
 ```
