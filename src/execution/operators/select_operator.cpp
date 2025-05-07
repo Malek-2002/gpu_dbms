@@ -1,6 +1,9 @@
 #include "execution/operators/select_operator.hpp"
 #include <stdexcept>
 
+extern std::vector<long> copy_column(const std::vector<long>& input_data);
+extern std::vector<double> copy_column(const std::vector<double>& input_data);
+
 namespace gpu_dbms {
 namespace execution {
 
@@ -52,11 +55,23 @@ std::shared_ptr<Result> SelectOperator::execute() {
         storage::ColumnData output_col;
 
         switch (col_info.type) {
+            // cpu version INT
+            // case storage::DataType::INT:
+            //     output_col = std::get<storage::IntColumn>(input_col);
+            //     break;
+            //////////////////////////////////////////////////////////
+            // gpu version INT
             case storage::DataType::INT:
-                output_col = std::get<storage::IntColumn>(input_col);
-                break;
+                output_col = copy_column(std::get<storage::IntColumn>(input_col));
+                break;  
+            // cpu version FLOAT
+            // case storage::DataType::FLOAT:
+            //     output_col = std::get<storage::FloatColumn>(input_col);
+            //     break;
+            //////////////////////////////////////////////////////////
+            // gpu version FLOAT
             case storage::DataType::FLOAT:
-                output_col = std::get<storage::FloatColumn>(input_col);
+                output_col = copy_column(std::get<storage::FloatColumn>(input_col));
                 break;
             case storage::DataType::STRING:
                 output_col = std::get<storage::StringColumn>(input_col);
