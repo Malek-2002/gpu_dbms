@@ -93,14 +93,17 @@ Then you can try
 
 ```sql
 SELECT * FROM employees WHERE salary >  100000;
--- SELECT * FROM employees WHERE name = Ahmed;
+SELECT * FROM employees WHERE age > 30;
+SELECT * FROM employees WHERE salary <= 50000;
+SELECT * FROM employees WHERE name = 'Emma Johnson';
+SELECT * FROM employees WHERE name != 'Emma Johnson';
 ```
 
 
 ### AGG
 
 ```sql
-SELECT sum(employee_id) as sum_1 FROM employees;
+-- SELECT sum(employee_id) as sum_1 FROM employees;
 ```
 
 ### ORDER BY
