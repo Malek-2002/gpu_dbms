@@ -79,11 +79,22 @@ SELECT e.name FROM employees as e;
 SELECT employee_id, name FROM employees;
 
 SELECT * FROM employees;
-
-SELECT * FROM employees WHERE salary >  100000;
 ```
 
 ### WHERE
+
+First load table
+
+```bash
+.load ../test_csv_files/employees.csv employees
+```
+
+Then you can try
+
+```sql
+SELECT * FROM employees WHERE salary >  100000;
+-- SELECT * FROM employees WHERE name = Ahmed;
+```
 
 
 ### AGG
@@ -125,6 +136,7 @@ Then you can try
 ```sql
 SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id;
 
+SELECT e.name, e.salary FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 140000;
 
--- SELECT e.name, e.salary, e.department_id, d.department_name FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000;
+SELECT e.name, e.salary, e.age FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000 AND e.age < 30;
 ```
