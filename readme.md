@@ -59,3 +59,24 @@ This will launch the database shell with a prompt: `gpu-dbms> `
 ```sql
 SELECT employee_id, name, salary, age FROM employees ORDER BY age;
 ```
+
+## Sample Queries
+### ORDER BY
+
+First load table
+
+```bash
+.load ../test_csv_files/employees.csv employees
+```
+
+Then you can try
+
+```sql
+SELECT employee_id, name, salary, age FROM employees ORDER BY age;
+
+SELECT employee_id, name, salary, age FROM employees ORDER BY name;
+
+SELECT employee_id, name, salary, age FROM employees ORDER BY salary DESC;
+
+SELECT employee_id, name, salary, age FROM employees ORDER BY age ASC, salary DESC;
+```
