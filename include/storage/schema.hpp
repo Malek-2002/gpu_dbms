@@ -33,6 +33,9 @@ public:
     const std::vector<ColumnInfo>& getColumns() const;
     const std::string& getTableName() const;
     
+    // Check if a column exists
+    bool hasColumn(const std::string& column_name) const;
+    
     // Get primary key column(s)
     std::vector<std::string> getPrimaryKeyColumns() const;
     
