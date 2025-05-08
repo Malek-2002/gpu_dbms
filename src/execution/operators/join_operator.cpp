@@ -5,24 +5,28 @@
 #include <vector>
 #include <variant>
 
+// include extern function that calls CUDA kernel
+// /////////////////// join kernels //////////////////////
+// int version
 extern std::vector<int> launch_join_compare(
     const std::vector<int>& left,
     const std::vector<int>& right,
     size_t n, size_t m,
     int op_code);
-
+// long version
 extern std::vector<int> launch_join_compare(
     const std::vector<long>& left,
     const std::vector<long>& right,
     size_t n, size_t m,
     int op_code);
-
+// double version
 extern std::vector<int> launch_join_compare(
     const std::vector<double>& left,
     const std::vector<double>& right,
     size_t n, size_t m,
     int op_code);
-
+////////////////////// and or kernels //////////////////////
+// int version
 extern std::vector<int> launch_join_and_or(
     const std::vector<int>& left,
     const std::vector<int>& right,
@@ -138,8 +142,10 @@ void evaluateBinaryExpression(
         const auto& left_data = std::get<storage::IntColumn>(left_data_variant);
         const auto& right_data = std::get<storage::IntColumn>(right_data_variant);
 
+        // gpu version
         result = launch_join_compare(left_data, right_data, n, m, static_cast<int>(op));
-
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // cpu version
         // for (size_t i = 0; i < n; ++i) {
         //     for (size_t j = 0; j < m; ++j) {
         //         switch (op) {
@@ -156,8 +162,10 @@ void evaluateBinaryExpression(
         const auto& left_data = std::get<storage::FloatColumn>(left_data_variant);
         const auto& right_data = std::get<storage::FloatColumn>(right_data_variant);
 
+        // gpu version
         result = launch_join_compare(left_data, right_data, n, m, static_cast<int>(op));
-
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // cpu version
         // for (size_t i = 0; i < n; ++i) {
         //     for (size_t j = 0; j < m; ++j) {
         //         switch (op) {
@@ -176,10 +184,13 @@ void evaluateBinaryExpression(
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = 0; j < m; ++j) {
                 switch (op) {
+                    // gpu version
                     case parser::OperatorType::EQUALS:         result[i * m + j] = (left_data[i] == right_data[j]); break;
+                    case parser::OperatorType::NOT_EQUALS:     result[i * m + j] = (left_data[i] != right_data[j]); break;
+                    /////////////////////////////////////////////////////////////////////////////////////////////////////
+                    // cpu version
                     // case parser::OperatorType::EQUALS:     result[i][j] = (left_data[i] == right_data[j]); break;
                     // case parser::OperatorType::NOT_EQUALS: result[i][j] = (left_data[i] != right_data[j]); break;
-                    case parser::OperatorType::NOT_EQUALS:     result[i * m + j] = (left_data[i] != right_data[j]); break;
                     default: break; // skip invalid ops
                 }
             }
@@ -221,8 +232,10 @@ void evaluateExpression(
         evaluateExpression(logical_expr->left, left_table, right_table, left_table_ref, right_table_ref, left_result);
         evaluateExpression(logical_expr->right, left_table, right_table, left_table_ref, right_table_ref, right_result);
 
+        // gpu version
         result = launch_join_and_or(left_result, right_result, n, m, static_cast<int>(logical_expr->op));
-
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // cpu version
         // for (size_t i = 0; i < n; ++i) {
         //     for (size_t j = 0; j < m; ++j) {
         //         if (logical_expr->op == parser::LogicalOperatorType::AND) {
