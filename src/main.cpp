@@ -1,25 +1,30 @@
 #include "cli/command_line.hpp"
 #include <iostream>
-#define CLI_FLAG false
+#include <string>
 
 int main(int argc, char** argv) {
-    if (CLI_FLAG) {
-        try {
-            gpu_dbms::cli::CommandLine cli;
+    try {
+        gpu_dbms::cli::CommandLine cli;
+
+        // Check if --cli is one of the arguments
+        bool cli_mode = false;
+        for (int i = 1; i < argc; ++i) {
+            if (std::string(argv[i]) == "--cli") {
+                cli_mode = true;
+                break;
+            }
+        }
+
+        if (cli_mode) {
             cli.run();
-        } catch (const std::exception& e) {
-            std::cerr << "Fatal error: " << e.what() << std::endl;
-            return 1;
-        }
-    } else {
-        try {
-            gpu_dbms::cli::CommandLine cli;
+        } else {
             cli.run_e2e(argc, argv);
-        } catch (const std::exception& e) {
-            std::cerr << "Fatal error: " << e.what() << std::endl;
-            return 1;
         }
+
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error: " << e.what() << std::endl;
+        return 1;
     }
-    
+
     return 0;
 }

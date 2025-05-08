@@ -34,6 +34,40 @@ mkdir build
 cd build
 cmake ..
 make -j$(nproc)
+cd ..
+```
+
+## Run the project (E2E)
+
+```bash
+./gpu_dbms <data_folder_path> <query_file_path>
+```
+
+For example
+
+```
+.
+├── build
+├── CMakeLists.txt
+├── gpu_dbms
+├── SampleTest
+│   ├── command.md
+│   ├── data
+│   │   ├── Employees.csv
+│   │   ├── Products.csv
+│   │   └── SalesOrders.csv
+│   ├── query1.txt
+│   ├── query2.txt
+│   ├── query3.txt
+│   ├── result1.csv
+│   ├── result2.csv
+│   └── result3.csv
+
+...
+```
+
+```bash
+./gpu_dbms SampleTest/data SampleTest/query3.txt
 ```
 
 ## Run the Project
@@ -41,7 +75,7 @@ make -j$(nproc)
 After building, run the executable:
 
 ```bash
-./gpu_dbms
+./gpu_dbms --cli
 ```
 
 This will launch the database shell with a prompt: `gpu-dbms> `
@@ -49,9 +83,9 @@ This will launch the database shell with a prompt: `gpu-dbms> `
 ### Load Tables
 
 ```bash
-.load ../test_csv_files/employees.csv employees
-.load ../test_csv_files/departments.csv departments
-.load ../test_csv_files/projects.csv projects
+.load ../test_csv_files/employees.csv
+.load ../test_csv_files/departments.csv
+.load ../test_csv_files/projects.csv
 ```
 
 ### Run Queries
@@ -66,7 +100,7 @@ SELECT employee_id, name, salary, age FROM employees ORDER BY age;
 First load table
 
 ```bash
-.load ../test_csv_files/employees.csv employees
+.load ../test_csv_files/employees.csv
 ```
 
 Then you can try
@@ -86,7 +120,7 @@ SELECT * FROM employees;
 First load table
 
 ```bash
-.load ../test_csv_files/employees.csv employees
+.load ../test_csv_files/employees.csv
 ```
 
 Then you can try
@@ -113,7 +147,7 @@ SELECT sum(employee_id) as sum_1 FROM employees;
 First load table
 
 ```bash
-.load ../test_csv_files/employees.csv employees
+.load ../test_csv_files/employees.csv
 ```
 
 Then you can try
@@ -133,8 +167,8 @@ SELECT age, salary FROM employees ORDER BY age ASC, salary DESC;
 First load tables
 
 ```bash
-.load ../test_csv_files/employees.csv employees
-.load ../test_csv_files/departments.csv departments
+.load ../test_csv_files/employees.csv
+.load ../test_csv_files/departments.csv
 ```
 
 Then you can try
@@ -150,4 +184,17 @@ SELECT e.name FROM employees e, departments d WHERE e.department_id = d.departme
 SELECT e.name, e.salary, e.age FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000 AND e.age < 30;
 
 SELECT sum(e.salary) as sum_1 FROM employees e, departments d WHERE e.department_id = d.department_id;
+```
+
+### Nested Query
+
+```sql
+SELECT employee_id, name FROM (SELECT employee_id, name FROM employees);
+
+SELECT name FROM (SELECT salary, name FROM employees);
+
+SELECT name, department_name FROM (SELECT e.name, e.age, d.department_name FROM employees e, departments d WHERE e.department_id = d.department_id and e.salary > 100000 and e.age > 60);
+SELECT avg(salary) FROM (SELECT e.salary, e.age, d.department_name FROM employees e, departments d WHERE e.department_id = d.department_id and e.salary > 100000 and e.age > 60);
+
+SELECT name FROM (SELECT salary, name FROM (SELECT name, age, salary FROM employees));
 ```
