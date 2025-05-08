@@ -2,6 +2,11 @@
 #include <stdexcept>
 // #include <iostream> // For debugging
 
+extern std::vector<long> copy_column(const std::vector<long>& input_data);
+extern std::vector<double> copy_column(const std::vector<double>& input_data);
+
+#define USE_CUDA true
+
 namespace gpu_dbms {
 namespace execution {
 
@@ -60,23 +65,21 @@ std::shared_ptr<Result> SelectOperator::execute() {
         storage::ColumnData output_col;
 
         switch (col_info.type) {
-            // cpu version INT
-            // case storage::DataType::INT:
-            //     output_col = std::get<storage::IntColumn>(input_col);
-            //     break;
-            //////////////////////////////////////////////////////////
-            // gpu version INT
             case storage::DataType::INT:
-                // Allocate (vec of num_rows)
-                output_col = storage::IntColumn(num_rows);
-                // Copy data
-                std::get<storage::IntColumn>(output_col) = std::get<storage::IntColumn>(input_col);
+                if(USE_CUDA) {
+                    output_col = copy_column(std::get<storage::IntColumn>(input_col));
+                } else {
+                    output_col = storage::IntColumn(num_rows); // Allocate (vec of num_rows)
+                    std::get<storage::IntColumn>(output_col) = std::get<storage::IntColumn>(input_col); // Copy data
+                }
                 break;
             case storage::DataType::FLOAT:
-                // Allocate (vec of num_rows)
-                output_col = storage::FloatColumn(num_rows);
-                // Copy data
-                std::get<storage::FloatColumn>(output_col) = std::get<storage::FloatColumn>(input_col);
+                if(USE_CUDA) {
+                    output_col = copy_column(std::get<storage::FloatColumn>(input_col));
+                } else {
+                    output_col = storage::FloatColumn(num_rows); // Allocate (vec of num_rows)
+                    std::get<storage::FloatColumn>(output_col) = std::get<storage::FloatColumn>(input_col); // Copy data
+                }
                 break;
             case storage::DataType::STRING:
                 // Allocate (vec of num_rows)
