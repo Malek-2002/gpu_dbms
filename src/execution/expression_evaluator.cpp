@@ -44,9 +44,6 @@ Value ExpressionEvaluator::evaluateColumnExpression(const parser::ColumnExpressi
     }
 
     std::string col_name = expr->column.column_name;
-    if (!expr->column.table_name.empty()) {
-        col_name = expr->column.table_name + "." + col_name;
-    }
 
     try {
         const auto& col_info = schema_->getColumn(col_name);
@@ -130,9 +127,6 @@ Value ExpressionEvaluator::evaluateAggregateExpression(const parser::AggregateEx
     // Get the entire column data for the expression
     if (auto col_expr = dynamic_cast<const parser::ColumnExpression*>(expr->expr.get())) {
         std::string col_name = col_expr->column.column_name;
-        if (!col_expr->column.table_name.empty()) {
-            col_name = col_expr->column.table_name + "." + col_name;
-        }
 
         try {
             const auto& col_info = schema_->getColumn(col_name);

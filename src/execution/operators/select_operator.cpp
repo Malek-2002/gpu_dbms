@@ -1,8 +1,6 @@
 #include "execution/operators/select_operator.hpp"
 #include <stdexcept>
-
-extern std::vector<long> copy_column(const std::vector<long>& input_data);
-extern std::vector<double> copy_column(const std::vector<double>& input_data);
+// #include <iostream> // For debugging
 
 namespace gpu_dbms {
 namespace execution {
@@ -44,6 +42,13 @@ std::shared_ptr<Result> SelectOperator::execute() {
         }
     }
 
+    // // Debug: Print output schema
+    // std::cerr << "SelectOperator: Output schema columns: ";
+    // for (const auto& col : output_schema_->getColumns()) {
+    //     std::cerr << col.name << " ";
+    // }
+    // std::cerr << std::endl;
+
     // Create output table with output schema
     auto output_table = std::make_shared<storage::Table>(output_schema_);
     size_t num_rows = table->numRows();
@@ -62,22 +67,28 @@ std::shared_ptr<Result> SelectOperator::execute() {
             //////////////////////////////////////////////////////////
             // gpu version INT
             case storage::DataType::INT:
-                output_col = copy_column(std::get<storage::IntColumn>(input_col));
-                break;  
-            // cpu version FLOAT
-            // case storage::DataType::FLOAT:
-            //     output_col = std::get<storage::FloatColumn>(input_col);
-            //     break;
-            //////////////////////////////////////////////////////////
-            // gpu version FLOAT
+                // Allocate (vec of num_rows)
+                output_col = storage::IntColumn(num_rows);
+                // Copy data
+                std::get<storage::IntColumn>(output_col) = std::get<storage::IntColumn>(input_col);
+                break;
             case storage::DataType::FLOAT:
-                output_col = copy_column(std::get<storage::FloatColumn>(input_col));
+                // Allocate (vec of num_rows)
+                output_col = storage::FloatColumn(num_rows);
+                // Copy data
+                std::get<storage::FloatColumn>(output_col) = std::get<storage::FloatColumn>(input_col);
                 break;
             case storage::DataType::STRING:
-                output_col = std::get<storage::StringColumn>(input_col);
+                // Allocate (vec of num_rows)
+                output_col = storage::StringColumn(num_rows);
+                // Copy data
+                std::get<storage::StringColumn>(output_col) = std::get<storage::StringColumn>(input_col);
                 break;
             case storage::DataType::BOOLEAN:
-                output_col = std::get<storage::BoolColumn>(input_col);
+                // Allocate (vec of num_rows)
+                output_col = storage::BoolColumn(num_rows);
+                // Copy data
+                std::get<storage::BoolColumn>(output_col) = std::get<storage::BoolColumn>(input_col);
                 break;
             default:
                 throw std::runtime_error("SelectOperator: Unsupported column type for column '" + col_name + "'");
@@ -99,6 +110,10 @@ void SelectOperator::setInput(std::shared_ptr<Result> input) {
 
 std::shared_ptr<storage::Schema> SelectOperator::getOutputSchema() const {
     return output_schema_;
+}
+
+const parser::TableRef& SelectOperator::getTableRef() const {
+    return table_ref_;
 }
 
 } // namespace execution
