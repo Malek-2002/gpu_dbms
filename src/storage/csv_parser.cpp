@@ -16,70 +16,59 @@ std::shared_ptr<Schema> CSVParser::parseSchema(const std::string& csv_file, cons
     if (!file.is_open()) {
         throw std::runtime_error("Could not open file: " + csv_file);
     }
-    
+
     std::string header_line;
     if (!std::getline(file, header_line)) {
         throw std::runtime_error("Empty CSV file: " + csv_file);
     }
-    
+
     auto column_names = splitLine(header_line);
     auto schema = std::make_shared<Schema>(table_name);
-    
-    // Read first data line to infer types
-    std::string data_line;
-    if (!std::getline(file, data_line)) {
-        throw std::runtime_error("CSV file has only header: " + csv_file);
-    }
-    auto data_values = splitLine(data_line);
-    
-    if (data_values.size() != column_names.size()) {
-        throw std::runtime_error("Header and data row have different number of fields");
-    }
-    
-    for (size_t i = 0; i < column_names.size(); ++i) {
-        std::string col_name = column_names[i];
+
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
+        s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
+    };
+
+    for (auto& col_raw : column_names) {
+        std::string col_name = col_raw;
         bool is_primary_key = false;
         bool is_foreign_key = false;
         std::string referenced_table;
         std::string referenced_column;
-        
-        // Check for primary key tag
-        if (col_name.find("(P)") != std::string::npos) {
-            is_primary_key = true;
-            col_name = col_name.substr(0, col_name.find("(P)"));
-            col_name = col_name.substr(0, col_name.find_last_not_of(" ") + 1); // Trim
-        }
-        
-        // Check for foreign key format: #PrimaryTableName_id
-        if (col_name.front() == '#') {
+        DataType type = DataType::STRING;  // Default type
+
+        // Tag extractor and eraser
+        auto extractAndEraseTag = [&](const std::string& tag) {
+            size_t pos = col_name.find(tag);
+            if (pos != std::string::npos) {
+                col_name.erase(pos, tag.length());
+                return true;
+            }
+            return false;
+        };
+
+        // Extract known tags
+        if (extractAndEraseTag("(P)")) is_primary_key = true;
+        if (extractAndEraseTag("(F)")) is_foreign_key = true;
+        if (extractAndEraseTag("(T)")) type = DataType::STRING;
+        if (extractAndEraseTag("(D)")) type = DataType::STRING; // Can replace with DataType::DATE if supported
+        if (extractAndEraseTag("(N)")) type = DataType::FLOAT;
+
+        // Trim remaining spaces
+        trim(col_name);
+
+        // Check for foreign key by #ReferencedTable_column pattern
+        if (!col_name.empty() && col_name.front() == '#') {
             is_foreign_key = true;
             size_t underscore_pos = col_name.find_last_of('_');
             if (underscore_pos != std::string::npos) {
                 referenced_table = col_name.substr(1, underscore_pos - 1);
                 referenced_column = col_name.substr(underscore_pos + 1);
-                col_name = col_name.substr(1); // Remove '#'
+                col_name = col_name.substr(1);  // remove '#'
             }
         }
-        
-        // Infer data type from first row
-        DataType type = DataType::STRING; // Default
-        const std::string& value = data_values[i];
-        
-        if (value.empty()) {
-            // Can't infer from empty value, use string as default
-        } else if (std::all_of(value.begin(), value.end(), 
-                              [](char c) { return std::isdigit(c) || c == '-'; })) {
-            type = DataType::INT;
-        } else if (std::count(value.begin(), value.end(), '.') == 1 &&
-                  std::all_of(value.begin(), value.end(), 
-                             [](char c) { return std::isdigit(c) || c == '.' || c == '-'; })) {
-            type = DataType::FLOAT;
-        } else if (value == "true" || value == "false" || 
-                  value == "TRUE" || value == "FALSE" || 
-                  value == "0" || value == "1") {
-            type = DataType::BOOLEAN;
-        }
-        
+
         ColumnInfo col_info{
             col_name,
             type,
@@ -88,10 +77,10 @@ std::shared_ptr<Schema> CSVParser::parseSchema(const std::string& csv_file, cons
             referenced_table,
             referenced_column
         };
-        
+
         schema->addColumn(col_info);
     }
-    
+
     return schema;
 }
 

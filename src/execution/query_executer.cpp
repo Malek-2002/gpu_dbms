@@ -26,10 +26,17 @@ std::shared_ptr<Result> QueryExecutor::execute(std::shared_ptr<parser::QueryMode
 std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser::QueryModel> query_model) {
     auto plan = std::make_shared<QueryPlan>();
 
-    // Handle subqueries (if present)
+    // // Handle (FROM) subqueries (if present)
     if (query_model->hasSubquery()) {
-        throw std::runtime_error("QueryExecutor: Subqueries not yet supported");
+        // throw std::runtime_error("QueryExecutor: Subqueries not yet supported");
+        std::shared_ptr<Result> result = execute(query_model->subquery);
+        catalog_.addSchema(result->getSchema());
+        catalog_.addTable(result->getData());
+        std::shared_ptr<parser::TableRef> table_ref = std::make_shared<parser::TableRef>();
+        table_ref->table_name = result->getSchema()->getTableName();
+        query_model->tables.push_back(*table_ref);
     }
+    
 
     // Validate table references
     if (query_model->tables.empty()) {
