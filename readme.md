@@ -83,9 +83,9 @@ This will launch the database shell with a prompt: `gpu-dbms> `
 ### Load Tables
 
 ```bash
-.load ../test_csv_files/employees.csv
-.load ../test_csv_files/departments.csv
-.load ../test_csv_files/projects.csv
+.load test_csv_files/employees.csv
+.load test_csv_files/departments.csv
+.load test_csv_files/projects.csv
 ```
 
 ### Run Queries
@@ -100,7 +100,7 @@ SELECT employee_id, name, salary, age FROM employees ORDER BY age;
 First load table
 
 ```bash
-.load ../test_csv_files/employees.csv
+.load test_csv_files/employees.csv
 ```
 
 Then you can try
@@ -120,7 +120,7 @@ SELECT * FROM employees;
 First load table
 
 ```bash
-.load ../test_csv_files/employees.csv
+.load test_csv_files/employees.csv
 ```
 
 Then you can try
@@ -147,7 +147,7 @@ SELECT sum(employee_id) as sum_1 FROM employees;
 First load table
 
 ```bash
-.load ../test_csv_files/employees.csv
+.load test_csv_files/employees.csv
 ```
 
 Then you can try
@@ -167,8 +167,8 @@ SELECT age, salary FROM employees ORDER BY age ASC, salary DESC;
 First load tables
 
 ```bash
-.load ../test_csv_files/employees.csv
-.load ../test_csv_files/departments.csv
+.load test_csv_files/employees.csv
+.load test_csv_files/departments.csv
 ```
 
 Then you can try
@@ -194,6 +194,7 @@ SELECT employee_id, name FROM (SELECT employee_id, name FROM employees);
 SELECT name FROM (SELECT salary, name FROM employees);
 
 SELECT name, department_name FROM (SELECT e.name, e.age, d.department_name FROM employees e, departments d WHERE e.department_id = d.department_id and e.salary > 100000 and e.age > 60);
+
 SELECT avg(salary) FROM (SELECT e.salary, e.age, d.department_name FROM employees e, departments d WHERE e.department_id = d.department_id and e.salary > 100000 and e.age > 60);
 
 SELECT name FROM (SELECT salary, name FROM (SELECT name, age, salary FROM employees));
