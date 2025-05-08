@@ -5,6 +5,30 @@
 #include <vector>
 #include <variant>
 
+extern std::vector<int> launch_join_compare(
+    const std::vector<int>& left,
+    const std::vector<int>& right,
+    size_t n, size_t m,
+    int op_code);
+
+extern std::vector<int> launch_join_compare(
+    const std::vector<long>& left,
+    const std::vector<long>& right,
+    size_t n, size_t m,
+    int op_code);
+
+extern std::vector<int> launch_join_compare(
+    const std::vector<double>& left,
+    const std::vector<double>& right,
+    size_t n, size_t m,
+    int op_code);
+
+extern std::vector<int> launch_join_and_or(
+    const std::vector<int>& left,
+    const std::vector<int>& right,
+    size_t n, size_t m,
+    int op_code);
+
 namespace gpu_dbms {
 namespace execution {
 
@@ -67,7 +91,7 @@ void evaluateBinaryExpression(
     const storage::Table& right_table,
     const parser::TableRef& left_table_ref,
     const parser::TableRef& right_table_ref,
-    std::vector<std::vector<bool>>& result) {
+    std::vector<int>& result) {
 
     // Extract column expressions
     auto* left_col_expr = dynamic_cast<parser::ColumnExpression*>(expr.left.get());
@@ -113,41 +137,49 @@ void evaluateBinaryExpression(
     if (std::holds_alternative<storage::IntColumn>(left_data_variant)) {
         const auto& left_data = std::get<storage::IntColumn>(left_data_variant);
         const auto& right_data = std::get<storage::IntColumn>(right_data_variant);
-        for (size_t i = 0; i < n; ++i) {
-            for (size_t j = 0; j < m; ++j) {
-                switch (op) {
-                    case parser::OperatorType::EQUALS:         result[i][j] = (left_data[i] == right_data[j]); break;
-                    case parser::OperatorType::NOT_EQUALS:     result[i][j] = (left_data[i] != right_data[j]); break;
-                    case parser::OperatorType::LESS_THAN:      result[i][j] = (left_data[i] <  right_data[j]); break;
-                    case parser::OperatorType::GREATER_THAN:   result[i][j] = (left_data[i] >  right_data[j]); break;
-                    case parser::OperatorType::LESS_EQUALS:    result[i][j] = (left_data[i] <= right_data[j]); break;
-                    case parser::OperatorType::GREATER_EQUALS: result[i][j] = (left_data[i] >= right_data[j]); break;
-                }
-            }
-        }
+
+        result = launch_join_compare(left_data, right_data, n, m, static_cast<int>(op));
+
+        // for (size_t i = 0; i < n; ++i) {
+        //     for (size_t j = 0; j < m; ++j) {
+        //         switch (op) {
+        //             case parser::OperatorType::EQUALS:         result[i][j] = (left_data[i] == right_data[j]); break;
+        //             case parser::OperatorType::NOT_EQUALS:     result[i][j] = (left_data[i] != right_data[j]); break;
+        //             case parser::OperatorType::LESS_THAN:      result[i][j] = (left_data[i] <  right_data[j]); break;
+        //             case parser::OperatorType::GREATER_THAN:   result[i][j] = (left_data[i] >  right_data[j]); break;
+        //             case parser::OperatorType::LESS_EQUALS:    result[i][j] = (left_data[i] <= right_data[j]); break;
+        //             case parser::OperatorType::GREATER_EQUALS: result[i][j] = (left_data[i] >= right_data[j]); break;
+        //         }
+        //     }
+        // }
     } else if (std::holds_alternative<storage::FloatColumn>(left_data_variant)) {
         const auto& left_data = std::get<storage::FloatColumn>(left_data_variant);
         const auto& right_data = std::get<storage::FloatColumn>(right_data_variant);
-        for (size_t i = 0; i < n; ++i) {
-            for (size_t j = 0; j < m; ++j) {
-                switch (op) {
-                    case parser::OperatorType::EQUALS:         result[i][j] = (left_data[i] == right_data[j]); break;
-                    case parser::OperatorType::NOT_EQUALS:     result[i][j] = (left_data[i] != right_data[j]); break;
-                    case parser::OperatorType::LESS_THAN:      result[i][j] = (left_data[i] <  right_data[j]); break;
-                    case parser::OperatorType::GREATER_THAN:   result[i][j] = (left_data[i] >  right_data[j]); break;
-                    case parser::OperatorType::LESS_EQUALS:    result[i][j] = (left_data[i] <= right_data[j]); break;
-                    case parser::OperatorType::GREATER_EQUALS: result[i][j] = (left_data[i] >= right_data[j]); break;
-                }
-            }
-        }
+
+        result = launch_join_compare(left_data, right_data, n, m, static_cast<int>(op));
+
+        // for (size_t i = 0; i < n; ++i) {
+        //     for (size_t j = 0; j < m; ++j) {
+        //         switch (op) {
+        //             case parser::OperatorType::EQUALS:         result[i][j] = (left_data[i] == right_data[j]); break;
+        //             case parser::OperatorType::NOT_EQUALS:     result[i][j] = (left_data[i] != right_data[j]); break;
+        //             case parser::OperatorType::LESS_THAN:      result[i][j] = (left_data[i] <  right_data[j]); break;
+        //             case parser::OperatorType::GREATER_THAN:   result[i][j] = (left_data[i] >  right_data[j]); break;
+        //             case parser::OperatorType::LESS_EQUALS:    result[i][j] = (left_data[i] <= right_data[j]); break;
+        //             case parser::OperatorType::GREATER_EQUALS: result[i][j] = (left_data[i] >= right_data[j]); break;
+        //         }
+        //     }
+        // }
     } else if (std::holds_alternative<storage::StringColumn>(left_data_variant)) {
         const auto& left_data = std::get<storage::StringColumn>(left_data_variant);
         const auto& right_data = std::get<storage::StringColumn>(right_data_variant);
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = 0; j < m; ++j) {
                 switch (op) {
-                    case parser::OperatorType::EQUALS:     result[i][j] = (left_data[i] == right_data[j]); break;
-                    case parser::OperatorType::NOT_EQUALS: result[i][j] = (left_data[i] != right_data[j]); break;
+                    case parser::OperatorType::EQUALS:         result[i * m + j] = (left_data[i] == right_data[j]); break;
+                    // case parser::OperatorType::EQUALS:     result[i][j] = (left_data[i] == right_data[j]); break;
+                    // case parser::OperatorType::NOT_EQUALS: result[i][j] = (left_data[i] != right_data[j]); break;
+                    case parser::OperatorType::NOT_EQUALS:     result[i * m + j] = (left_data[i] != right_data[j]); break;
                     default: break; // skip invalid ops
                 }
             }
@@ -158,8 +190,8 @@ void evaluateBinaryExpression(
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = 0; j < m; ++j) {
                 switch (op) {
-                    case parser::OperatorType::EQUALS:     result[i][j] = (left_data[i] == right_data[j]); break;
-                    case parser::OperatorType::NOT_EQUALS: result[i][j] = (left_data[i] != right_data[j]); break;
+                    case parser::OperatorType::EQUALS:     result[i * m + j] = (left_data[i] == right_data[j]); break;
+                    case parser::OperatorType::NOT_EQUALS: result[i * m + j] = (left_data[i] != right_data[j]); break;
                     default: break; // optional for <, > etc.
                 }
             }
@@ -175,7 +207,7 @@ void evaluateExpression(
     const storage::Table& right_table,
     const parser::TableRef& left_table_ref,
     const parser::TableRef& right_table_ref,
-    std::vector<std::vector<bool>>& result) {
+    std::vector<int>& result) {
     
     size_t n = left_table.numRows();
     size_t m = right_table.numRows();
@@ -183,21 +215,25 @@ void evaluateExpression(
     if (auto bin_expr = std::dynamic_pointer_cast<parser::BinaryExpression>(expr)) {
         evaluateBinaryExpression(*bin_expr, left_table, right_table, left_table_ref, right_table_ref, result);
     } else if (auto logical_expr = std::dynamic_pointer_cast<parser::LogicalExpression>(expr)) {
-        std::vector<std::vector<bool>> left_result(n, std::vector<bool>(m, false));
-        std::vector<std::vector<bool>> right_result(n, std::vector<bool>(m, false));
+        std::vector<int> left_result(n * m, 0);
+        std::vector<int> right_result(n * m, 0);
 
         evaluateExpression(logical_expr->left, left_table, right_table, left_table_ref, right_table_ref, left_result);
         evaluateExpression(logical_expr->right, left_table, right_table, left_table_ref, right_table_ref, right_result);
 
-        for (size_t i = 0; i < n; ++i) {
-            for (size_t j = 0; j < m; ++j) {
-                if (logical_expr->op == parser::LogicalOperatorType::AND) {
-                    result[i][j] = left_result[i][j] && right_result[i][j];
-                } else if (logical_expr->op == parser::LogicalOperatorType::OR) {
-                    result[i][j] = left_result[i][j] || right_result[i][j];
-                }
-            }
-        }
+        result = launch_join_and_or(left_result, right_result, n, m, static_cast<int>(logical_expr->op));
+
+        // for (size_t i = 0; i < n; ++i) {
+        //     for (size_t j = 0; j < m; ++j) {
+        //         if (logical_expr->op == parser::LogicalOperatorType::AND) {
+        //             result[i * m + j] = left_result[i * m + j] && right_result[i * m + j];
+        //             // result[i][j] = left_result[i][j] && right_result[i][j];
+        //         } else if (logical_expr->op == parser::LogicalOperatorType::OR) {
+        //             result[i * m + j] = left_result[i * m + j] || right_result[i * m + j];
+        //             // result[i][j] = left_result[i][j] || right_result[i][j];
+        //         }
+        //     }
+        // }
     } else {
         throw std::runtime_error("Unsupported expression type in join condition");
     }
@@ -252,7 +288,7 @@ std::shared_ptr<Result> JoinOperator::execute() {
     size_t n = left_table->numRows();
     size_t m = right_table->numRows();
 
-    std::vector<std::vector<bool>> evaluated_matrix(n, std::vector<bool>(m, false));
+    std::vector<int> evaluated_matrix(n * m, 0);
 
     // Evaluate the condition to get the (n × m) boolean array
     evaluateExpression(condition_, *left_table, *right_table, left_table_, right_table_, evaluated_matrix);
@@ -261,7 +297,7 @@ std::shared_ptr<Result> JoinOperator::execute() {
     size_t result_row_count = 0;
     for (size_t i = 0; i < n; ++i) {
         for (size_t j = 0; j < m; ++j) {
-            if (evaluated_matrix[i][j]) {
+            if (evaluated_matrix[i * m + j]) {
                 ++result_row_count;
             }
         }
@@ -296,7 +332,7 @@ std::shared_ptr<Result> JoinOperator::execute() {
     size_t result_idx = 0;
     for (size_t i = 0; i < n; ++i) {
         for (size_t j = 0; j < m; ++j) {
-            if (evaluated_matrix[i][j]) {
+            if (evaluated_matrix[i * m + j]) {
                 // Merge the rows from left and right tables
                 for (const auto& col_info : output_schema_->getColumns()) {
                     const auto& col_name = col_info.name;
