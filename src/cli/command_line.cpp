@@ -7,6 +7,10 @@
 #include <algorithm>
 #include <iomanip>
 
+// For e2e test
+#include <filesystem>
+namespace fs = std::filesystem;
+
 namespace gpu_dbms {
 namespace cli {
 
@@ -79,6 +83,60 @@ void CommandLine::run() {
     }
 }
 
+void CommandLine::run_e2e(int argc, char** argv) {
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <input_folder> <query_file>" << std::endl;
+        return;
+    }
+    std::string input_folder = argv[1];
+    std::string query_file_path = argv[2];
+    
+    std::cout << "Starting E2E test..." << std::endl;
+
+    // Load all CSV files in the input folder
+    for (const auto& entry : fs::directory_iterator(input_folder)) {
+        if (entry.is_regular_file()) {
+            const std::string path = entry.path().string();
+            if (path.size() >= 4 && path.substr(path.size() - 4) == ".csv") {
+                std::string load_command = ".load " + path;
+                std::cout << "Executing: " << load_command << std::endl;
+                processLoadCommand(load_command);
+            }
+        }
+    }
+
+    // Open and read the query file
+    std::ifstream query_file(query_file_path);
+    if (!query_file.is_open()) {
+        std::cerr << "Error: Failed to open query file: " << query_file_path << std::endl;
+        return;
+    }
+
+    std::cout << "Executing queries from: " << query_file_path << std::endl;
+    std::string line, full_query;
+    while (std::getline(query_file, line)) {
+        // Trim line (optional)
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+
+        if (line.empty()) continue;
+
+        full_query += line + " ";
+
+        // Check for end of query
+        if (!line.empty() && line.back() == ';') {
+            processSQLQuery(full_query);
+            full_query.clear();
+        }
+    }
+
+    if (!full_query.empty()) {
+        std::cout << "Warning: Query did not end with ';': " << full_query << std::endl;
+    }
+
+    std::cout << "E2E test completed." << std::endl;
+}
+
 bool CommandLine::processCommand(const std::string& command) {
     for (const auto& handler : command_handlers_) {
         if (command.find(handler.first) == 0) {
@@ -115,15 +173,27 @@ void CommandLine::displayHelp() {
 
 bool CommandLine::processLoadCommand(const std::string& command) {
     std::istringstream iss(command);
-    std::string cmd, filename, table_name;
+    std::string cmd, filename;
     
-    iss >> cmd >> filename >> table_name;
+    iss >> cmd >> filename;
     
-    if (filename.empty() || table_name.empty()) {
-        std::cout << "Usage: .load FILENAME TABLE" << std::endl;
+    if (filename.empty()) {
+        std::cout << "Usage: .load FILENAME" << std::endl;
         return false;
     }
-    
+
+    // Extract just the filename (no path)
+    size_t slash_pos = filename.find_last_of("/\\");
+    std::string table_name = (slash_pos != std::string::npos)
+                             ? filename.substr(slash_pos + 1)
+                             : filename;
+
+    // Remove .csv extension
+    size_t dot_pos = table_name.rfind(".csv");
+    if (dot_pos != std::string::npos && dot_pos == table_name.length() - 4) {
+        table_name = table_name.substr(0, dot_pos);
+    }
+
     try {
         storage::Catalog::getInstance().loadFromCSV(table_name, filename);
         std::cout << "Loaded data from " << filename << " into table " << table_name << std::endl;
@@ -133,6 +203,7 @@ bool CommandLine::processLoadCommand(const std::string& command) {
         return false;
     }
 }
+
 
 bool CommandLine::processTablesCommand(const std::string& command) {
     try {

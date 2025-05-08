@@ -18,6 +18,7 @@ public:
 
     // Main execution loop
     void run();
+    void run_e2e(int argc, char** argv);
 
     // Add custom command handler
     void addCommandHandler(const std::string& prefix, 

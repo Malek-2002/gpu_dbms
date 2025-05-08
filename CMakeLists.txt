@@ -27,6 +27,11 @@ set(SOURCE_FILES
 # Create the main executable
 add_executable(gpu_dbms ${SOURCE_FILES})
 
+# Set output binary to the main project directory
+set_target_properties(gpu_dbms PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # Define include directories
 set(INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/include
