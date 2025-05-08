@@ -28,6 +28,7 @@ set(SOURCE_FILES
 set(CUDA_SOURCES
     src/execution/gpu/aggregate.cu  # Adjust path as needed
     src/execution/gpu/column_copy.cu
+    src/execution/gpu/aggregate_streams_extended.cu
 )
 
 # Define include directories
