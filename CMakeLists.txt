@@ -31,6 +31,11 @@ set(CUDA_SOURCES
     src/execution/gpu/aggregate_streams_extended.cu
 )
 
+# Set output binary to the main project directory
+set_target_properties(gpu_dbms PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # Define include directories
 set(INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/include

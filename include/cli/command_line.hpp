@@ -18,6 +18,7 @@ public:
 
     // Main execution loop
     void run();
+    void run_e2e(int argc, char** argv);
 
     // Add custom command handler
     void addCommandHandler(const std::string& prefix, 
@@ -36,7 +37,7 @@ private:
 
     // Command processing
     bool processCommand(const std::string& command);
-    bool processSQLQuery(const std::string& query);
+    bool processSQLQuery(const std::string& query, std::string file_name = "");
 
     // Built-in command handlers
     bool processLoadCommand(const std::string& command);
