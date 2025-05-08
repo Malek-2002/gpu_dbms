@@ -34,7 +34,6 @@ std::string SQLParserWrapper::getErrorMsg() const {
 }
 
 // Helper functions for convertToQueryModel
-std::shared_ptr<Expression> convertExpression(const hsql::Expr* expr, const std::unordered_map<std::string, std::string>& alias_to_table_map);
 std::shared_ptr<QueryModel> convertSelectStatement(const hsql::SelectStatement* stmt);
 
 // Flatten AND conditions into a list
@@ -53,6 +52,8 @@ std::vector<std::shared_ptr<Expression>> flattenAndConditions(std::shared_ptr<Ex
         } else {
             conditions.push_back(expr);
         }
+    } else if (auto subquery_expr = std::dynamic_pointer_cast<SubqueryExpression>(expr)) {
+        conditions.push_back(expr); // Subquery as a condition
     } else {
         conditions.push_back(expr);
     }
@@ -62,7 +63,8 @@ std::vector<std::shared_ptr<Expression>> flattenAndConditions(std::shared_ptr<Ex
 // Get TableRef objects from an expression
 std::vector<TableRef> getTableRefsFromExpression(std::shared_ptr<Expression> expr, 
                                                  const std::vector<TableRef>& tables, 
-                                                 const std::unordered_map<std::string, std::string>& alias_to_table_map) {
+                                                 const std::unordered_map<std::string, std::string>& alias_to_table_map,
+                                                 QueryModel* model) {
     std::set<std::string> table_identifiers;
     std::vector<TableRef> result;
 
@@ -81,6 +83,20 @@ std::vector<TableRef> getTableRefsFromExpression(std::shared_ptr<Expression> exp
         } else if (auto logical_expr = std::dynamic_pointer_cast<LogicalExpression>(e)) {
             collectIdentifiers(logical_expr->left);
             collectIdentifiers(logical_expr->right);
+        } else if (auto agg_expr = std::dynamic_pointer_cast<AggregateExpression>(e)) {
+            collectIdentifiers(agg_expr->expr);
+        } else if (auto subquery_expr = std::dynamic_pointer_cast<SubqueryExpression>(e)) {
+            // Recursively collect tables from the subquery
+            if (model && subquery_expr->subquery_index < model->subqueries.size()) {
+                auto subquery = model->subqueries[subquery_expr->subquery_index];
+                for (const auto& table : subquery->tables) {
+                    if (!table.alias.empty()) {
+                        table_identifiers.insert(table.alias);
+                    } else if (!table.table_name.empty()) {
+                        table_identifiers.insert(table.table_name);
+                    }
+                }
+            }
         }
     };
 
@@ -118,9 +134,11 @@ void SQLParserWrapper::convertToQueryModel(const hsql::SQLParserResult& result) 
 
 std::shared_ptr<QueryModel> convertSelectStatement(const hsql::SelectStatement* stmt) {
     auto model = std::make_shared<QueryModel>();
+    model->type = OperationType::SELECT;
     
     std::unordered_map<std::string, std::string> alias_to_table_map;
     
+    // Handle FROM clause
     if (stmt->fromTable) {
         if (stmt->fromTable->type == hsql::kTableName) {
             TableRef table;
@@ -179,6 +197,7 @@ std::shared_ptr<QueryModel> convertSelectStatement(const hsql::SelectStatement* 
         } else if (stmt->fromTable->type == hsql::kTableSelect) {
             if (stmt->fromTable->select) {
                 model->subquery = convertSelectStatement(stmt->fromTable->select);
+                model->subquery->type = OperationType::SUBQUERY;
                 if (stmt->fromTable->alias) {
                     TableRef table;
                     table.table_name = "";
@@ -190,17 +209,19 @@ std::shared_ptr<QueryModel> convertSelectStatement(const hsql::SelectStatement* 
         }
     }
     
+    // Handle SELECT list with potential subqueries
     for (hsql::Expr* expr : *stmt->selectList) {
-        model->select_list.push_back(convertExpression(expr, alias_to_table_map));
+        model->select_list.push_back(convertExpression(expr, alias_to_table_map, model.get()));
     }
     
+    // Handle WHERE clause with potential subqueries
     if (stmt->whereClause) {
-        model->where_clause = convertExpression(stmt->whereClause, alias_to_table_map);
+        model->where_clause = convertExpression(stmt->whereClause, alias_to_table_map, model.get());
         if (!model->tables.empty()) {
             model->conditions = flattenAndConditions(model->where_clause);
             for (size_t i = 0; i < model->conditions.size(); ++i) {
                 const auto& cond = model->conditions[i];
-                auto table_refs = getTableRefsFromExpression(cond, model->tables, alias_to_table_map);
+                auto table_refs = getTableRefsFromExpression(cond, model->tables, alias_to_table_map, model.get());
                 if (table_refs.size() > 1) {
                     // Join condition
                     model->join_conditions.emplace_back(table_refs, i);
@@ -214,19 +235,25 @@ std::shared_ptr<QueryModel> convertSelectStatement(const hsql::SelectStatement* 
         }
     }
     
+    // Handle ORDER BY
     if (stmt->order) {
         for (hsql::OrderDescription* order : *stmt->order) {
             SortOrder sort_order = order->type == hsql::kOrderAsc ? SortOrder::ASC : SortOrder::DESC;
-            model->order_by.emplace_back(convertExpression(order->expr, alias_to_table_map), sort_order);
+            model->order_by.emplace_back(convertExpression(order->expr, alias_to_table_map, model.get()), sort_order);
         }
     }
     
     return model;
 }
 
-std::shared_ptr<Expression> convertExpression(const hsql::Expr* expr, 
-                                              const std::unordered_map<std::string, std::string>& alias_to_table_map) {
-    if (!expr) return nullptr;
+std::shared_ptr<Expression> convertExpression(const hsql::Expr* expr,
+    const std::unordered_map<std::string, std::string>& alias_to_table_map,
+    QueryModel* model) {
+    if (!expr) {
+        auto const_expr = std::make_shared<ConstantExpression>();
+        const_expr->type = ConstantExpression::ValueType::NULL_VALUE;
+        return const_expr;
+    }
     
     switch (expr->type) {
         case hsql::kExprColumnRef: {
@@ -245,6 +272,9 @@ std::shared_ptr<Expression> convertExpression(const hsql::Expr* expr,
             } else {
                 col_expr->column.table_name = "";
                 col_expr->column.alias = "";
+            }
+            if (expr->alias) {
+                col_expr->alias = expr->alias;
             }
             return col_expr;
         }
@@ -271,89 +301,96 @@ std::shared_ptr<Expression> convertExpression(const hsql::Expr* expr,
         }
         
         case hsql::kExprOperator: {
-            if (expr->opType == hsql::kOpAnd || expr->opType == hsql::kOpOr) {
+            if (expr->opType == hsql::OperatorType::kOpAnd || expr->opType == hsql::OperatorType::kOpOr) {
                 auto logical_expr = std::make_shared<LogicalExpression>();
-                
+                logical_expr->op = (expr->opType == hsql::OperatorType::kOpAnd)
+                    ? LogicalOperatorType::AND
+                    : LogicalOperatorType::OR;
+                logical_expr->left = convertExpression(expr->expr, alias_to_table_map, model);
+                logical_expr->right = convertExpression(expr->expr2, alias_to_table_map, model);
+                return logical_expr;
+            } else {
+                auto bin_expr = std::make_shared<BinaryExpression>();
                 switch (expr->opType) {
-                    case hsql::kOpAnd:
-                        logical_expr->op = LogicalOperatorType::AND;
+                    case hsql::OperatorType::kOpEquals:
+                        bin_expr->op = OperatorType::EQUALS;
                         break;
-                    case hsql::kOpOr:
-                        logical_expr->op = LogicalOperatorType::OR;
+                    case hsql::OperatorType::kOpNotEquals:
+                        bin_expr->op = OperatorType::NOT_EQUALS;
+                        break;
+                    case hsql::OperatorType::kOpLess:
+                        bin_expr->op = OperatorType::LESS_THAN;
+                        break;
+                    case hsql::OperatorType::kOpGreater:
+                        bin_expr->op = OperatorType::GREATER_THAN;
+                        break;
+                    case hsql::OperatorType::kOpLessEq:
+                        bin_expr->op = OperatorType::LESS_EQUALS;
+                        break;
+                    case hsql::OperatorType::kOpGreaterEq:
+                        bin_expr->op = OperatorType::GREATER_EQUALS;
                         break;
                     default:
-                        return nullptr;
+                        auto const_expr = std::make_shared<ConstantExpression>();
+                        const_expr->type = ConstantExpression::ValueType::NULL_VALUE;
+                        return const_expr;
                 }
-                
-                logical_expr->left = convertExpression(expr->expr, alias_to_table_map);
-                logical_expr->right = convertExpression(expr->expr2, alias_to_table_map);
-                return logical_expr;
+                bin_expr->left = convertExpression(expr->expr, alias_to_table_map, model);
+                bin_expr->right = convertExpression(expr->expr2, alias_to_table_map, model);
+                return bin_expr;
             }
-            
-            auto bin_expr = std::make_shared<BinaryExpression>();
-            
-            switch (expr->opType) {
-                case hsql::kOpEquals:
-                    bin_expr->op = OperatorType::EQUALS;
-                    break;
-                case hsql::kOpNotEquals:
-                    bin_expr->op = OperatorType::NOT_EQUALS;
-                    break;
-                case hsql::kOpLess:
-                    bin_expr->op = OperatorType::LESS_THAN;
-                    break;
-                case hsql::kOpGreater:
-                    bin_expr->op = OperatorType::GREATER_THAN;
-                    break;
-                case hsql::kOpLessEq:
-                    bin_expr->op = OperatorType::LESS_EQUALS;
-                    break;
-                case hsql::kOpGreaterEq:
-                    bin_expr->op = OperatorType::GREATER_EQUALS;
-                    break;
-                default:
-                    return nullptr;
-            }
-            
-            bin_expr->left = convertExpression(expr->expr, alias_to_table_map);
-            bin_expr->right = convertExpression(expr->expr2, alias_to_table_map);
-            return bin_expr;
         }
         
         case hsql::kExprFunctionRef: {
-            std::string func_name = expr->name;
+            std::string func_name(expr->name);
             for (char& c : func_name) c = tolower(c);
-            
-            if (func_name == "count" || func_name == "sum" || func_name == "avg" ||
-                func_name == "min" || func_name == "max") {
-                auto agg_expr = std::make_shared<AggregateExpression>();
-                
-                if (func_name == "count") agg_expr->type = AggregateType::COUNT;
-                else if (func_name == "sum") agg_expr->type = AggregateType::SUM;
-                else if (func_name == "avg") agg_expr->type = AggregateType::AVG;
-                else if (func_name == "min") agg_expr->type = AggregateType::MIN;
-                else if (func_name == "max") agg_expr->type = AggregateType::MAX;
-                
-                if (func_name == "count" && (!expr->exprList || expr->exprList->empty())) {
-                    // COUNT(*)
-                } else if (expr->exprList && expr->exprList->size() > 0) {
-                    agg_expr->expr = convertExpression(expr->exprList->at(0), alias_to_table_map);
-                }
-                
-                if (expr->alias) {
-                    agg_expr->alias = expr->alias;
-                }
-                
-                return agg_expr;
+            auto agg_expr = std::make_shared<AggregateExpression>();
+            if (func_name == "count") {
+                agg_expr->type = AggregateType::COUNT;
+            } else if (func_name == "sum") {
+                agg_expr->type = AggregateType::SUM;
+            } else if (func_name == "avg") {
+                agg_expr->type = AggregateType::AVG;
+            } else if (func_name == "min") {
+                agg_expr->type = AggregateType::MIN;
+            } else if (func_name == "max") {
+                agg_expr->type = AggregateType::MAX;
+            } else {
+                auto const_expr = std::make_shared<ConstantExpression>();
+                const_expr->type = ConstantExpression::ValueType::NULL_VALUE;
+                return const_expr;
             }
-            break;
+            if (func_name == "count" && (!expr->exprList || expr->exprList->empty())) {
+                // COUNT(*)
+            } else if (expr->exprList && !expr->exprList->empty()) {
+                agg_expr->expr = convertExpression(expr->exprList->at(0), alias_to_table_map, model);
+            }
+            if (expr->alias) {
+                agg_expr->alias = expr->alias;
+            }
+            return agg_expr;
         }
         
-        default:
-            break;
+        case hsql::kExprSelect: {
+            if (expr->select) {
+                auto subquery_expr = std::make_shared<SubqueryExpression>();
+                auto subquery_model = convertSelectStatement(expr->select);
+                subquery_model->type = OperationType::SUBQUERY;
+                model->subqueries.push_back(subquery_model);
+                subquery_expr->subquery_index = model->subqueries.size() - 1;
+                return subquery_expr;
+            }
+            auto const_expr = std::make_shared<ConstantExpression>();
+            const_expr->type = ConstantExpression::ValueType::NULL_VALUE;
+            return const_expr;
+        }
+        
+        default: {
+            auto const_expr = std::make_shared<ConstantExpression>();
+            const_expr->type = ConstantExpression::ValueType::NULL_VALUE;
+            return const_expr;
+        }
     }
-    
-    return nullptr;
 }
 
 static void printIndent(int indent_level) {
@@ -387,7 +424,20 @@ static std::string sortOrderToString(SortOrder order) {
     return order == SortOrder::ASC ? "ASC" : "DESC";
 }
 
-static void printExpression(const std::shared_ptr<Expression>& expr, int indent_level) {
+static std::string operationTypeToString(OperationType type) {
+    switch (type) {
+        case OperationType::SELECT: return "SELECT";
+        case OperationType::PROJECT: return "PROJECT";
+        case OperationType::FILTER: return "FILTER";
+        case OperationType::JOIN: return "JOIN";
+        case OperationType::AGGREGATE: return "AGGREGATE";
+        case OperationType::SORT: return "SORT";
+        case OperationType::SUBQUERY: return "SUBQUERY";
+        default: return "UNKNOWN";
+    }
+}
+
+static void printExpression(const std::shared_ptr<Expression>& expr, int indent_level, QueryModel* model) {
     if (!expr) {
         printIndent(indent_level);
         std::cout << "Null Expression" << std::endl;
@@ -406,9 +456,11 @@ static void printExpression(const std::shared_ptr<Expression>& expr, int indent_
             }
             std::cout << ")";
         }
+        if (!col_expr->alias.empty()) {
+            std::cout << ", Expression Alias: " << col_expr->alias;
+        }
         std::cout << std::endl;
-    }
-    else if (auto const_expr = std::dynamic_pointer_cast<ConstantExpression>(expr)) {
+    } else if (auto const_expr = std::dynamic_pointer_cast<ConstantExpression>(expr)) {
         printIndent(indent_level);
         std::cout << "ConstantExpression:" << std::endl;
         printIndent(indent_level + 1);
@@ -423,36 +475,39 @@ static void printExpression(const std::shared_ptr<Expression>& expr, int indent_
             case ConstantExpression::ValueType::STRING:
                 std::cout << "STRING, Value: \"" << const_expr->string_value << "\"";
                 break;
+            case ConstantExpression::ValueType::BOOLEAN:
+                std::cout << "BOOLEAN, Value: " << (const_expr->bool_value ? "true" : "false");
+                break;
+            case ConstantExpression::ValueType::NULL_VALUE:
+                std::cout << "NULL";
+                break;
             default:
                 std::cout << "UNKNOWN";
         }
         std::cout << std::endl;
-    }
-    else if (auto bin_expr = std::dynamic_pointer_cast<BinaryExpression>(expr)) {
+    } else if (auto bin_expr = std::dynamic_pointer_cast<BinaryExpression>(expr)) {
         printIndent(indent_level);
         std::cout << "BinaryExpression:" << std::endl;
         printIndent(indent_level + 1);
         std::cout << "Operator: " << operatorToString(bin_expr->op) << std::endl;
         printIndent(indent_level + 1);
         std::cout << "Left:" << std::endl;
-        printExpression(bin_expr->left, indent_level + 2);
+        printExpression(bin_expr->left, indent_level + 2, model);
         printIndent(indent_level + 1);
         std::cout << "Right:" << std::endl;
-        printExpression(bin_expr->right, indent_level + 2);
-    }
-    else if (auto logical_expr = std::dynamic_pointer_cast<LogicalExpression>(expr)) {
+        printExpression(bin_expr->right, indent_level + 2, model);
+    } else if (auto logical_expr = std::dynamic_pointer_cast<LogicalExpression>(expr)) {
         printIndent(indent_level);
         std::cout << "LogicalExpression:" << std::endl;
         printIndent(indent_level + 1);
         std::cout << "Operator: " << (logical_expr->op == LogicalOperatorType::AND ? "AND" : "OR") << std::endl;
         printIndent(indent_level + 1);
         std::cout << "Left:" << std::endl;
-        printExpression(logical_expr->left, indent_level + 2);
+        printExpression(logical_expr->left, indent_level + 2, model);
         printIndent(indent_level + 1);
         std::cout << "Right:" << std::endl;
-        printExpression(logical_expr->right, indent_level + 2);
-    }
-    else if (auto agg_expr = std::dynamic_pointer_cast<AggregateExpression>(expr)) {
+        printExpression(logical_expr->right, indent_level + 2, model);
+    } else if (auto agg_expr = std::dynamic_pointer_cast<AggregateExpression>(expr)) {
         printIndent(indent_level);
         std::cout << "AggregateExpression:" << std::endl;
         printIndent(indent_level + 1);
@@ -464,10 +519,22 @@ static void printExpression(const std::shared_ptr<Expression>& expr, int indent_
         if (agg_expr->expr) {
             printIndent(indent_level + 1);
             std::cout << "Expression:" << std::endl;
-            printExpression(agg_expr->expr, indent_level + 2);
+            printExpression(agg_expr->expr, indent_level + 2, model);
         }
-    }
-    else {
+    } else if (auto subquery_expr = std::dynamic_pointer_cast<SubqueryExpression>(expr)) {
+        printIndent(indent_level);
+        std::cout << "SubqueryExpression:" << std::endl;
+        printIndent(indent_level + 1);
+        std::cout << "Subquery Index: " << subquery_expr->subquery_index << std::endl;
+        if (model && subquery_expr->subquery_index < model->subqueries.size()) {
+            printIndent(indent_level + 1);
+            std::cout << "Subquery:" << std::endl;
+            SQLParserWrapper sub_parser;
+            sub_parser.parse(""); // Initialize to avoid uninitialized state
+            sub_parser.query_model_ = model->subqueries[subquery_expr->subquery_index];
+            sub_parser.printModel(indent_level + 2);
+        }
+    } else {
         printIndent(indent_level);
         std::cout << "Unknown Expression Type" << std::endl;
     }
@@ -481,7 +548,7 @@ void SQLParserWrapper::printModel(int indent_level) const {
     }
 
     printIndent(indent_level);
-    std::cout << "QueryModel:" << std::endl;
+    std::cout << "QueryModel (Type: " << operationTypeToString(query_model_->type) << "):" << std::endl;
 
     if (!query_model_->tables.empty()) {
         printIndent(indent_level + 1);
@@ -502,7 +569,7 @@ void SQLParserWrapper::printModel(int indent_level) const {
         for (const auto& expr : query_model_->select_list) {
             printIndent(indent_level + 2);
             std::cout << "Expression:" << std::endl;
-            printExpression(expr, indent_level + 3);
+            printExpression(expr, indent_level + 3, query_model_.get());
         }
     }
 
@@ -512,7 +579,7 @@ void SQLParserWrapper::printModel(int indent_level) const {
         for (size_t i = 0; i < query_model_->conditions.size(); ++i) {
             printIndent(indent_level + 2);
             std::cout << "Condition [" << i << "]:" << std::endl;
-            printExpression(query_model_->conditions[i], indent_level + 3);
+            printExpression(query_model_->conditions[i], indent_level + 3, query_model_.get());
         }
     }
 
@@ -549,7 +616,7 @@ void SQLParserWrapper::printModel(int indent_level) const {
     if (query_model_->where_clause) {
         printIndent(indent_level + 1);
         std::cout << "Where Clause:" << std::endl;
-        printExpression(query_model_->where_clause, indent_level + 2);
+        printExpression(query_model_->where_clause, indent_level + 2, query_model_.get());
     }
 
     if (!query_model_->order_by.empty()) {
@@ -560,7 +627,7 @@ void SQLParserWrapper::printModel(int indent_level) const {
             std::cout << "Sort:" << std::endl;
             printIndent(indent_level + 3);
             std::cout << "Expression:" << std::endl;
-            printExpression(order.first, indent_level + 4);
+            printExpression(order.first, indent_level + 4, query_model_.get());
             printIndent(indent_level + 3);
             std::cout << "Order: " << sortOrderToString(order.second) << std::endl;
         }
@@ -568,10 +635,24 @@ void SQLParserWrapper::printModel(int indent_level) const {
 
     if (query_model_->subquery) {
         printIndent(indent_level + 1);
-        std::cout << "Subquery:" << std::endl;
+        std::cout << "FROM Clause Subquery:" << std::endl;
         SQLParserWrapper sub_parser;
+        sub_parser.parse(""); // Initialize to avoid uninitialized state
         sub_parser.query_model_ = query_model_->subquery;
         sub_parser.printModel(indent_level + 2);
+    }
+
+    if (!query_model_->subqueries.empty()) {
+        printIndent(indent_level + 1);
+        std::cout << "Expression Subqueries:" << std::endl;
+        for (size_t i = 0; i < query_model_->subqueries.size(); ++i) {
+            printIndent(indent_level + 2);
+            std::cout << "Subquery [" << i << "]:" << std::endl;
+            SQLParserWrapper sub_parser;
+            sub_parser.parse(""); // Initialize to avoid uninitialized state
+            sub_parser.query_model_ = query_model_->subqueries[i];
+            sub_parser.printModel(indent_level + 3);
+        }
     }
 }
 

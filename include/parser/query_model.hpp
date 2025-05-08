@@ -45,7 +45,7 @@ enum class OperatorType {
     LESS_THAN,
     GREATER_THAN,
     LESS_EQUALS,
-    GREATER_EQUALS,
+    GREATER_EQUALS
 };
 
 enum class LogicalOperatorType {
@@ -109,12 +109,18 @@ struct AggregateExpression : public Expression {
     std::string alias;
 };
 
+struct SubqueryExpression : public Expression {
+    size_t subquery_index;  // Index into QueryModel::subqueries
+};
+
 struct QueryModel {
+    OperationType type = OperationType::SELECT;  // Default to SELECT
     std::vector<TableRef> tables;
     std::vector<std::shared_ptr<Expression>> select_list;
     std::shared_ptr<Expression> where_clause;
     std::vector<std::pair<std::shared_ptr<Expression>, SortOrder>> order_by;
-    std::shared_ptr<QueryModel> subquery;
+    std::shared_ptr<QueryModel> subquery;  // For FROM clause subquery
+    std::vector<std::shared_ptr<QueryModel>> subqueries;  // For subqueries in expressions
     // Store all conditions once
     std::vector<std::shared_ptr<Expression>> conditions;
     // Join conditions reference indices into conditions
@@ -122,8 +128,8 @@ struct QueryModel {
     // Table-specific conditions reference indices into conditions
     std::unordered_map<std::string, std::vector<size_t>> table_specific_conditions;
     
-    bool hasSubquery() const { return subquery != nullptr; }
-};  
+    bool hasSubquery() const { return subquery != nullptr || !subqueries.empty(); }
+};
 
 } // namespace parser
-} // namespace gpu_dbms
+} // namespace gpu_dbms 
