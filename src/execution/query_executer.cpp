@@ -218,6 +218,8 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                 select_schema->addColumn(col_info);
             }
         }
+
+
         // Include join keys for tables involved in joins
         for (const auto& [join_tables, cond_idx] : query_model->join_conditions) {
             for (const auto& table : join_tables) {
@@ -243,6 +245,115 @@ std::shared_ptr<QueryPlan> QueryExecutor::buildQueryPlan(std::shared_ptr<parser:
                 }
             }
         }
+
+
+        // Include columns from table-specific filter conditions (single-table queries)
+        if (query_model->tables.size() == 1) {
+            auto it = query_model->table_specific_conditions.find(table_key);
+            if (it != query_model->table_specific_conditions.end()) {
+                for (const auto& cond_idx : it->second) {
+                    bool is_join_condition = false;
+                    for (const auto& [join_tables, join_idx] : query_model->join_conditions) {
+                        if (join_idx == cond_idx) {
+                            is_join_condition = true;
+                            break;
+                        }
+                    }
+                    if (!is_join_condition) {
+                        if (auto bin_expr = std::dynamic_pointer_cast<parser::BinaryExpression>(
+                                query_model->conditions[cond_idx])) {
+                            if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(bin_expr->left)) {
+                                std::string col_table = col_expr->column.alias.empty() ? 
+                                                    col_expr->column.table_name : col_expr->column.alias;
+                                if (col_table == table_ref.table_name || col_table == table_key || col_table.empty()) {
+                                    auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                                    if (!col_info.name.empty()) {
+                                        if (!select_schema->hasColumn(col_info.name)) {
+                                            select_schema->addColumn(col_info);
+                                        }
+                                    } else {
+                                        throw std::runtime_error("Filter condition column not found: " + 
+                                                                col_expr->column.column_name + 
+                                                                " in table: " + table_ref.table_name);
+                                    }
+                                }
+                            }
+                            if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(bin_expr->right)) {
+                                std::string col_table = col_expr->column.alias.empty() ? 
+                                                    col_expr->column.table_name : col_expr->column.alias;
+                                if (col_table == table_ref.table_name || col_table == table_key || col_table.empty()) {
+                                    auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                                    if (!col_info.name.empty()) {
+                                        if (!select_schema->hasColumn(col_info.name)) {
+                                            select_schema->addColumn(col_info);
+                                        }
+                                    } else {
+                                        throw std::runtime_error("Filter condition column not found: " + 
+                                                                col_expr->column.column_name + 
+                                                                " in table: " + table_ref.table_name);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Include columns from global filter conditions
+        if (query_model->where_clause && !query_model->conditions.empty()) {
+            for (size_t i = 0; i < query_model->conditions.size(); ++i) {
+                bool is_join_condition = false;
+                for (const auto& [join_tables, join_idx] : query_model->join_conditions) {
+                    if (join_idx == i) {
+                        is_join_condition = true;
+                        break;
+                    }
+                }
+                if (!is_join_condition) {
+                    if (auto bin_expr = std::dynamic_pointer_cast<parser::BinaryExpression>(
+                            query_model->conditions[i])) {
+                        if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(bin_expr->left)) {
+                            std::string col_table = col_expr->column.alias.empty() ? 
+                                                col_expr->column.table_name : col_expr->column.alias;
+                            if (col_table == table_ref.table_name || 
+                                col_table == table_key || 
+                                (query_model->tables.size() == 1 && col_table.empty())) {
+                                auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                                if (!col_info.name.empty()) {
+                                    if (!select_schema->hasColumn(col_info.name)) {
+                                        select_schema->addColumn(col_info);
+                                    }
+                                } else {
+                                    throw std::runtime_error("Global filter column not found: " + 
+                                                            col_expr->column.column_name + 
+                                                            " in table: " + table_ref.table_name);
+                                }
+                            }
+                        }
+                        if (auto col_expr = std::dynamic_pointer_cast<parser::ColumnExpression>(bin_expr->right)) {
+                            std::string col_table = col_expr->column.alias.empty() ? 
+                                                col_expr->column.table_name : col_expr->column.alias;
+                            if (col_table == table_ref.table_name || 
+                                col_table == table_key || 
+                                (query_model->tables.size() == 1 && col_table.empty())) {
+                                auto col_info = table_schema->getColumn(col_expr->column.column_name);
+                                if (!col_info.name.empty()) {
+                                    if (!select_schema->hasColumn(col_info.name)) {
+                                        select_schema->addColumn(col_info);
+                                    }
+                                } else {
+                                    throw std::runtime_error("Global filter column not found: " + 
+                                                            col_expr->column.column_name + 
+                                                            " in table: " + table_ref.table_name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
 
         // Debug: Print select schema
         std::cerr << "Select schema for " << table_key << ": ";
@@ -500,6 +611,7 @@ std::shared_ptr<Result> QueryExecutor::executePlan(std::shared_ptr<QueryPlan> pl
     std::shared_ptr<Result> current_result;
     std::unordered_map<std::string, std::shared_ptr<Result>> intermediate_results;
     
+    // FIX: FILTER OPERATOR DOESN'T FIND THE COLUMN
     for (const auto& op : operators) {
         if (auto select_op = std::dynamic_pointer_cast<SelectOperator>(op)) {
             std::string table_key = select_op->getTableRef().alias.empty() ? 

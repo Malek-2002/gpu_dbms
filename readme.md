@@ -131,11 +131,10 @@ SELECT age, salary FROM employees ORDER BY age ASC, salary DESC;
 ### JOIN
 
 First load tables
-```bash
 
+```bash
 .load ../test_csv_files/employees.csv employees
 .load ../test_csv_files/departments.csv departments
-
 ```
 
 Then you can try
@@ -145,7 +144,10 @@ SELECT e.name FROM employees e, departments d WHERE e.department_id = d.departme
 
 SELECT e.name, e.salary FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 140000;
 
--- SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 140000;
+SELECT e.name FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000;
+
 
 SELECT e.name, e.salary, e.age FROM employees e, departments d WHERE e.department_id = d.department_id AND e.salary > 100000 AND e.age < 30;
+
+SELECT sum(e.salary) as sum_1 FROM employees e, departments d WHERE e.department_id = d.department_id;
 ```
