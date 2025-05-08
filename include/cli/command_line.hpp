@@ -37,7 +37,7 @@ private:
 
     // Command processing
     bool processCommand(const std::string& command);
-    bool processSQLQuery(const std::string& query);
+    bool processSQLQuery(const std::string& query, std::string file_name = "");
 
     // Built-in command handlers
     bool processLoadCommand(const std::string& command);
