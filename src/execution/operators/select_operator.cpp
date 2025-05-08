@@ -66,7 +66,7 @@ std::shared_ptr<Result> SelectOperator::execute() {
 
         switch (col_info.type) {
             case storage::DataType::INT:
-                if(USE_CUDA) {
+                if (USE_CUDA) {
                     output_col = copy_column(std::get<storage::IntColumn>(input_col));
                 } else {
                     output_col = storage::IntColumn(num_rows); // Allocate (vec of num_rows)
@@ -74,7 +74,7 @@ std::shared_ptr<Result> SelectOperator::execute() {
                 }
                 break;
             case storage::DataType::FLOAT:
-                if(USE_CUDA) {
+                if (USE_CUDA) {
                     output_col = copy_column(std::get<storage::FloatColumn>(input_col));
                 } else {
                     output_col = storage::FloatColumn(num_rows); // Allocate (vec of num_rows)

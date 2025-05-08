@@ -4,6 +4,10 @@
 #include <algorithm>
 #include <numeric>
 #include <stdexcept>
+#include <iostream>
+
+extern std::vector<long> copy_column_sorted(const std::vector<long>& input_data, const std::vector<size_t>& order);
+extern std::vector<double> copy_column_sorted(const std::vector<double>& input_data, const std::vector<size_t>& order);
 
 namespace gpu_dbms {
 namespace execution {
@@ -111,44 +115,49 @@ std::shared_ptr<Result> SortOperator::execute() {
     });
 
     // Copy rows to result table in sorted order
-    for (size_t idx = 0; idx < indices.size(); ++idx) {
-        size_t src_idx = indices[idx];
-        for (const auto& col_info : input_schema_->getColumns()) {
-            const auto& col_name = col_info.name;
-            auto& result_col = result_table->getColumn(col_name);
-            const auto& source_col = input_table->getColumn(col_name);
+    
+    for (const auto& col_info : input_schema_->getColumns()) {
+        const auto& col_name = col_info.name;
+        auto& result_col = result_table->getColumn(col_name);
+        const auto& source_col = input_table->getColumn(col_name);
 
-            switch (col_info.type) {
-                case storage::DataType::INT: {
-                    auto& dst = std::get<storage::IntColumn>(result_col);
-                    auto& src = std::get<storage::IntColumn>(source_col);
-                    dst[idx] = src[src_idx];
-                    break;
-                }
-                case storage::DataType::FLOAT: {
-                    auto& dst = std::get<storage::FloatColumn>(result_col);
-                    auto& src = std::get<storage::FloatColumn>(source_col);
-                    dst[idx] = src[src_idx];
-                    break;
-                }
-                case storage::DataType::STRING: {
+        switch (col_info.type) {
+            case storage::DataType::INT: {
+                auto& dst = std::get<storage::IntColumn>(result_col);
+                auto& src = std::get<storage::IntColumn>(source_col);
+                // dst[idx] = src[src_idx];
+                dst = copy_column_sorted(src, indices);
+                break;
+            }
+            case storage::DataType::FLOAT: {
+                auto& dst = std::get<storage::FloatColumn>(result_col);
+                auto& src = std::get<storage::FloatColumn>(source_col);
+                // dst[idx] = src[src_idx];
+                dst = copy_column_sorted(src, indices);
+                break;
+            }
+            case storage::DataType::STRING: {
+                for (size_t idx = 0; idx < indices.size(); ++idx) {
+                    size_t src_idx = indices[idx];
                     auto& dst = std::get<storage::StringColumn>(result_col);
                     auto& src = std::get<storage::StringColumn>(source_col);
                     dst[idx] = src[src_idx];
-                    break;
                 }
-                case storage::DataType::BOOLEAN: {
+                break;
+            }
+            case storage::DataType::BOOLEAN: {
+                for (size_t idx = 0; idx < indices.size(); ++idx) {
+                    size_t src_idx = indices[idx];
                     auto& dst = std::get<storage::BoolColumn>(result_col);
                     auto& src = std::get<storage::BoolColumn>(source_col);
                     dst[idx] = src[src_idx];
-                    break;
                 }
-                default:
-                    throw std::runtime_error("SortOperator: Unsupported column type in copy");
+                break;
             }
+            default:
+                throw std::runtime_error("SortOperator: Unsupported column type in copy");
         }
     }
-
     result->setData(result_table);
     return result;
 }
