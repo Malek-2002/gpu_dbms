@@ -32,6 +32,10 @@ const std::string& Schema::getTableName() const {
     return table_name_;
 }
 
+bool Schema::hasColumn(const std::string& column_name) const {
+    return column_map_.find(column_name) != column_map_.end();
+}
+
 std::vector<std::string> Schema::getPrimaryKeyColumns() const {
     std::vector<std::string> pk_columns;
     for (const auto& column : columns_) {

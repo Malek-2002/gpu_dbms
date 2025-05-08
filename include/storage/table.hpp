@@ -9,7 +9,8 @@
 namespace gpu_dbms {
 namespace storage {
 
-using IntColumn = std::vector<int>;
+// Column-oriented storage for better GPU processing
+using IntColumn = std::vector<long>;
 using FloatColumn = std::vector<double>;
 using StringColumn = std::vector<std::string>;
 using BoolColumn = std::vector<bool>;
